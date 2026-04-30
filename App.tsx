@@ -6,10 +6,10 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 import { GameEngine } from './src/engine';
 import { SkiaRenderer } from './src/engine/renderers/skia';
-import { movement, spawnDemo, spawnOnTap, world } from './src/game';
+import { physics, spawnDemo, spawnOnTap, world } from './src/game';
 
 export default function App() {
-  const systems = useMemo(() => [spawnOnTap, movement], []);
+  const systems = useMemo(() => [spawnOnTap, physics.step], []);
 
   useEffect(() => {
     if (world.nextId === 0) spawnDemo(150, 360, 720);

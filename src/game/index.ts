@@ -1,9 +1,9 @@
 import {
   addComponent,
   createEntity,
+  createPhysics,
   createWorld,
   defineComponent,
-  query,
   type System,
 } from '../engine';
 
@@ -17,41 +17,62 @@ export const Sprite = defineComponent(world, {
   tint: 'u32',
 });
 
-export function spawnDemo(count = 100, screenW = 400, screenH = 800): void {
+export const physics = createPhysics({
+  world,
+  position: Position,
+  velocity: Velocity,
+  gravity: { x: 0, y: 20 },
+  pixelsPerMeter: 30,
+});
+
+const WALL_THICKNESS = 20;
+const BALL_RADIUS = 5;
+
+function spawnBall(x: number, y: number, vx = 0, vy = 0): void {
+  const id = createEntity(world);
+  addComponent(world, id, Position, { x, y });
+  addComponent(world, id, Velocity, { x: vx, y: vy });
+  addComponent(world, id, Sprite, { atlas: 0, frame: 0, tint: 0xffffffff });
+  physics.attach(id, {
+    type: 'dynamic',
+    position: { x, y },
+    velocity: { x: vx, y: vy },
+    shape: { kind: 'circle', radius: BALL_RADIUS },
+    restitution: 0.6,
+    friction: 0.1,
+  });
+}
+
+function spawnWall(cx: number, cy: number, w: number, h: number): void {
+  const id = createEntity(world);
+  physics.attach(id, {
+    type: 'static',
+    position: { x: cx, y: cy },
+    shape: { kind: 'box', width: w, height: h },
+    friction: 0.3,
+  });
+}
+
+export function spawnDemo(count = 40, screenW = 360, screenH = 720): void {
+  spawnWall(screenW / 2, screenH, screenW, WALL_THICKNESS);
+  spawnWall(0, screenH / 2, WALL_THICKNESS, screenH);
+  spawnWall(screenW, screenH / 2, WALL_THICKNESS, screenH);
+
   for (let i = 0; i < count; i++) {
-    const id = createEntity(world);
-    addComponent(world, id, Position, {
-      x: Math.random() * screenW,
-      y: Math.random() * screenH,
-    });
-    addComponent(world, id, Velocity, {
-      x: (Math.random() - 0.5) * 60,
-      y: (Math.random() - 0.5) * 60,
-    });
-    addComponent(world, id, Sprite, { atlas: 0, frame: 0, tint: 0xffffffff });
+    const x = Math.random() * (screenW - 40) + 20;
+    const y = Math.random() * 200 + 40;
+    spawnBall(x, y);
   }
 }
 
-export const movement: System = (w, ctx) => {
-  const dt = ctx.time.delta;
-  query(w, Position, Velocity).each((id) => {
-    Position.data.x[id] += Velocity.data.x[id] * dt;
-    Position.data.y[id] += Velocity.data.y[id] * dt;
-  });
-};
-
-export const spawnOnTap: System = (w, ctx) => {
+export const spawnOnTap: System = (_w, ctx) => {
   for (let i = 0; i < ctx.input.touches.length; i++) {
     const t = ctx.input.touches[i];
     if (t.type !== 'tap') continue;
-    for (let n = 0; n < 16; n++) {
-      const id = createEntity(w);
-      addComponent(w, id, Position, { x: t.x, y: t.y });
-      addComponent(w, id, Velocity, {
-        x: (Math.random() - 0.5) * 200,
-        y: (Math.random() - 0.5) * 200,
-      });
-      addComponent(w, id, Sprite, { atlas: 0, frame: 0, tint: 0xffffffff });
+    for (let n = 0; n < 8; n++) {
+      const angle = (Math.PI * 2 * n) / 8;
+      const speed = 80 + Math.random() * 60;
+      spawnBall(t.x, t.y, Math.cos(angle) * speed, Math.sin(angle) * speed);
     }
   }
 };
