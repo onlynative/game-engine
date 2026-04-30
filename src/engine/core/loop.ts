@@ -18,6 +18,7 @@ export interface Loop {
   readonly isRunning: () => boolean;
   readonly setScreen: (width: number, height: number) => void;
   readonly dispatch: (e: GameEvent) => void;
+  readonly pushTouch: (e: TouchEvent) => void;
 }
 
 const now = (): number =>
@@ -54,11 +55,12 @@ export function createLoop(
   const step = (): void => {
     ctx.time.previous = ctx.time.current;
     ctx.time.current += stepS;
-    ctx.events.length = 0;
     const systems = getSystems();
     for (let i = 0; i < systems.length; i++) {
       systems[i](world, externalCtx);
     }
+    ctx.events.length = 0;
+    ctx.input.touches.length = 0;
   };
 
   const tick = (): void => {
@@ -99,6 +101,9 @@ export function createLoop(
     },
     dispatch(e): void {
       ctx.events.push(e);
+    },
+    pushTouch(e): void {
+      ctx.input.touches.push(e);
     },
   };
 }

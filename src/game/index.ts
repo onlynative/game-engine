@@ -39,3 +39,19 @@ export const movement: System = (w, ctx) => {
     Position.data.y[id] += Velocity.data.y[id] * dt;
   });
 };
+
+export const spawnOnTap: System = (w, ctx) => {
+  for (let i = 0; i < ctx.input.touches.length; i++) {
+    const t = ctx.input.touches[i];
+    if (t.type !== 'tap') continue;
+    for (let n = 0; n < 16; n++) {
+      const id = createEntity(w);
+      addComponent(w, id, Position, { x: t.x, y: t.y });
+      addComponent(w, id, Velocity, {
+        x: (Math.random() - 0.5) * 200,
+        y: (Math.random() - 0.5) * 200,
+      });
+      addComponent(w, id, Sprite, { atlas: 0, frame: 0, tint: 0xffffffff });
+    }
+  }
+};
