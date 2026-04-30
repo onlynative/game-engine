@@ -4,7 +4,6 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   type ReactNode,
 } from 'react';
 import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
@@ -42,13 +41,11 @@ export function GameEngine({
   hz = 60,
   children,
 }: GameEngineProps) {
-  const systemsRef = useRef(systems);
-  systemsRef.current = systems;
+  const loop = useMemo(() => createLoop(world, systems, { hz }), [hz]);
 
-  const loop = useMemo(
-    () => createLoop(world, () => systemsRef.current, { hz }),
-    [world, hz],
-  );
+  useEffect(() => {
+    loop.swap(world, systems);
+  }, [loop, world, systems]);
 
   useEffect(() => {
     if (running) loop.start();

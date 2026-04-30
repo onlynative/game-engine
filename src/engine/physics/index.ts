@@ -1,7 +1,18 @@
+import { addComponent, defineComponent, removeComponent } from '../core';
 import type { Component, EntityId, System, World } from '../core';
 
 export type Position2D = Component<{ x: 'f32'; y: 'f32' }>;
 export type Velocity2D = Component<{ x: 'f32'; y: 'f32' }>;
+
+export type BodyComponent = Component<{
+  type: 'u8';
+  shape: 'u8';
+  halfW: 'f32';
+  halfH: 'f32';
+  invMass: 'f32';
+  rest: 'f32';
+  fric: 'f32';
+}>;
 
 export type BodyShape =
   | { readonly kind: 'circle'; readonly radius: number }
@@ -25,6 +36,7 @@ export interface PhysicsOptions {
 }
 
 export interface Physics {
+  readonly body: BodyComponent;
   readonly attach: (id: EntityId, def: BodyDef) => void;
   readonly detach: (id: EntityId) => void;
   readonly step: System;
@@ -38,92 +50,81 @@ const TYPE_DYNAMIC = 1;
 
 export function createPhysics(opts: PhysicsOptions): Physics {
   const ecsWorld = opts.world;
-  const cap = ecsWorld.capacity;
-  const posX = opts.position.data.x as Float32Array;
-  const posY = opts.position.data.y as Float32Array;
-  const velX = opts.velocity.data.x as Float32Array;
-  const velY = opts.velocity.data.y as Float32Array;
+  const Position = opts.position;
+  const Velocity = opts.velocity;
+  const Body = defineComponent(ecsWorld, {
+    type: 'u8',
+    shape: 'u8',
+    halfW: 'f32',
+    halfH: 'f32',
+    invMass: 'f32',
+    rest: 'f32',
+    fric: 'f32',
+  });
+
+  const posX = Position.data.x as Float32Array;
+  const posY = Position.data.y as Float32Array;
+  const velX = Velocity.data.x as Float32Array;
+  const velY = Velocity.data.y as Float32Array;
+  const bodyType = Body.data.type as Uint8Array;
+  const bodyShape = Body.data.shape as Uint8Array;
+  const halfW = Body.data.halfW as Float32Array;
+  const halfH = Body.data.halfH as Float32Array;
+  const invMass = Body.data.invMass as Float32Array;
+  const rest = Body.data.rest as Float32Array;
+  const fric = Body.data.fric as Float32Array;
+
   const gravityX = opts.gravity?.x ?? 0;
   const gravityY = opts.gravity?.y ?? 600;
-
-  const bodyAlive = new Uint8Array(cap);
-  const bodyType = new Uint8Array(cap);
-  const bodyShape = new Uint8Array(cap);
-  const halfW = new Float32Array(cap);
-  const halfH = new Float32Array(cap);
-  const invMass = new Float32Array(cap);
-  const rest = new Float32Array(cap);
-  const fric = new Float32Array(cap);
 
   const dynamicIds: number[] = [];
   const staticIds: number[] = [];
 
   function attach(id: EntityId, def: BodyDef): void {
-    if (bodyAlive[id]) return;
-    bodyAlive[id] = 1;
-    bodyType[id] = def.type === 'dynamic' ? TYPE_DYNAMIC : TYPE_STATIC;
+    addComponent(ecsWorld, id, Position, { x: def.position.x, y: def.position.y });
+    addComponent(ecsWorld, id, Velocity, {
+      x: def.velocity?.x ?? 0,
+      y: def.velocity?.y ?? 0,
+    });
 
+    const isDynamic = def.type === 'dynamic';
+    let hw: number;
+    let hh: number;
+    let shape: number;
     if (def.shape.kind === 'circle') {
-      bodyShape[id] = SHAPE_CIRCLE;
-      halfW[id] = def.shape.radius;
-      halfH[id] = def.shape.radius;
+      shape = SHAPE_CIRCLE;
+      hw = def.shape.radius;
+      hh = def.shape.radius;
     } else {
-      bodyShape[id] = SHAPE_BOX;
-      halfW[id] = def.shape.width / 2;
-      halfH[id] = def.shape.height / 2;
+      shape = SHAPE_BOX;
+      hw = def.shape.width / 2;
+      hh = def.shape.height / 2;
     }
 
-    if (bodyType[id] === TYPE_DYNAMIC) {
+    let inv = 0;
+    if (isDynamic) {
       const m =
         def.mass !== undefined
           ? def.mass
           : def.shape.kind === 'circle'
             ? Math.PI * def.shape.radius * def.shape.radius
             : def.shape.width * def.shape.height;
-      invMass[id] = m > 0 ? 1 / m : 0;
-    } else {
-      invMass[id] = 0;
+      inv = m > 0 ? 1 / m : 0;
     }
 
-    rest[id] = def.restitution ?? 0;
-    fric[id] = def.friction ?? 0;
-
-    posX[id] = def.position.x;
-    posY[id] = def.position.y;
-    velX[id] = def.velocity?.x ?? 0;
-    velY[id] = def.velocity?.y ?? 0;
-
-    (bodyType[id] === TYPE_DYNAMIC ? dynamicIds : staticIds).push(id);
+    addComponent(ecsWorld, id, Body, {
+      type: isDynamic ? TYPE_DYNAMIC : TYPE_STATIC,
+      shape,
+      halfW: hw,
+      halfH: hh,
+      invMass: inv,
+      rest: def.restitution ?? 0,
+      fric: def.friction ?? 0,
+    });
   }
 
   function detach(id: EntityId): void {
-    if (!bodyAlive[id]) return;
-    bodyAlive[id] = 0;
-    const arr = bodyType[id] === TYPE_DYNAMIC ? dynamicIds : staticIds;
-    const i = arr.indexOf(id);
-    if (i >= 0) {
-      arr[i] = arr[arr.length - 1];
-      arr.length--;
-    }
-  }
-
-  function reapDead(): void {
-    for (let i = dynamicIds.length - 1; i >= 0; i--) {
-      const id = dynamicIds[i];
-      if (ecsWorld.alive[id] === 0) {
-        bodyAlive[id] = 0;
-        dynamicIds[i] = dynamicIds[dynamicIds.length - 1];
-        dynamicIds.length--;
-      }
-    }
-    for (let i = staticIds.length - 1; i >= 0; i--) {
-      const id = staticIds[i];
-      if (ecsWorld.alive[id] === 0) {
-        bodyAlive[id] = 0;
-        staticIds[i] = staticIds[staticIds.length - 1];
-        staticIds.length--;
-      }
-    }
+    removeComponent(ecsWorld, id, Body);
   }
 
   function resolveContact(a: number, b: number, nx: number, ny: number, overlap: number): void {
@@ -254,9 +255,26 @@ export function createPhysics(opts: PhysicsOptions): Physics {
     else collideBoxBox(a, b);
   }
 
+  const requiredMask = Body.bit | Position.bit | Velocity.bit;
+  const bodyOnlyMask = Body.bit | Position.bit;
+
   const step: System = (_w, ctx) => {
     const dt = ctx.time.delta;
-    reapDead();
+
+    dynamicIds.length = 0;
+    staticIds.length = 0;
+    const n = ecsWorld.nextId;
+    const alive = ecsWorld.alive;
+    const mask = ecsWorld.mask;
+    for (let i = 0; i < n; i++) {
+      if (alive[i] === 0) continue;
+      const m = mask[i];
+      if (bodyType[i] === TYPE_DYNAMIC) {
+        if ((m & requiredMask) === requiredMask) dynamicIds.push(i);
+      } else if ((m & bodyOnlyMask) === bodyOnlyMask) {
+        staticIds.push(i);
+      }
+    }
 
     const dynN = dynamicIds.length;
     for (let i = 0; i < dynN; i++) {
@@ -284,13 +302,13 @@ export function createPhysics(opts: PhysicsOptions): Physics {
   };
 
   return {
+    body: Body,
     attach,
     detach,
     step,
     destroy() {
       dynamicIds.length = 0;
       staticIds.length = 0;
-      bodyAlive.fill(0);
     },
   };
 }

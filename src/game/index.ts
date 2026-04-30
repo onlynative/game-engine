@@ -29,8 +29,6 @@ const BALL_RADIUS = 5;
 
 function spawnBall(x: number, y: number, vx = 0, vy = 0): void {
   const id = createEntity(world);
-  addComponent(world, id, Position, { x, y });
-  addComponent(world, id, Velocity, { x: vx, y: vy });
   addComponent(world, id, Sprite, { atlas: 0, frame: 0, tint: 0xffffffff });
   physics.attach(id, {
     type: 'dynamic',

@@ -7,6 +7,7 @@ export type {
   PhysicsOptions,
   BodyDef,
   BodyShape,
+  BodyComponent,
   Position2D,
   Velocity2D,
 } from './physics';
