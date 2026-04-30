@@ -1,15 +1,66 @@
 {
-  "name": "game-engine",
-  "version": "1.0.0",
-  "main": "index.ts",
+  "name": "@onlynative/game-engine",
+  "publishConfig": {
+    "access": "public"
+  },
+  "version": "0.1.0",
+  "description": "2D (and soon 3D) game engine for React Native + Expo Go. Skia-based renderer, ECS core, fixed-timestep loop, no native code.",
+  "keywords": [
+    "expo",
+    "expo-go",
+    "react-native",
+    "game-engine",
+    "ecs",
+    "skia",
+    "reanimated",
+    "2d"
+  ],
+  "license": "MIT",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./renderers/skia": {
+      "types": "./dist/renderers/skia/index.d.ts",
+      "import": "./dist/renderers/skia/index.js",
+      "default": "./dist/renderers/skia/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "prepack": "yarn build"
   },
-  "dependencies": {
+  "peerDependencies": {
+    "@shopify/react-native-skia": ">=2.2.0",
+    "expo": ">=54.0.0",
+    "expo-asset": ">=12.0.0",
+    "expo-file-system": ">=19.0.0",
+    "react": ">=19.0.0",
+    "react-native": ">=0.81.0",
+    "react-native-gesture-handler": ">=2.28.0",
+    "react-native-reanimated": ">=4.1.0",
+    "react-native-worklets": ">=0.5.0"
+  },
+  "devDependencies": {
     "@shopify/react-native-skia": "2.2.12",
+    "@types/react": "~19.1.0",
     "expo": "~54.0.33",
     "expo-asset": "~12.0.13",
     "expo-file-system": "~19.0.22",
@@ -19,11 +70,7 @@
     "react-native-gesture-handler": "~2.28.0",
     "react-native-reanimated": "~4.1.1",
     "react-native-safe-area-context": "~5.6.0",
-    "react-native-worklets": "0.5.1"
-  },
-  "devDependencies": {
-    "@types/react": "~19.1.0",
+    "react-native-worklets": "0.5.1",
     "typescript": "~5.9.2"
-  },
-  "private": true
+  }
 }

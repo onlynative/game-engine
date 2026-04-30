@@ -5,7 +5,7 @@ import {
   createWorld,
   defineComponent,
   type System,
-} from '../engine';
+} from '@onlynative/game-engine';
 
 export const world = createWorld({ capacity: 1024 });
 

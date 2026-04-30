@@ -6,8 +6,8 @@ import { useDerivedValue } from 'react-native-reanimated';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
-import { GameEngine } from './src/engine';
-import { SkiaRenderer, type SkiaSprite } from './src/engine/renderers/skia';
+import { GameEngine } from '@onlynative/game-engine';
+import { SkiaRenderer, type SkiaSprite } from '@onlynative/game-engine/renderers/skia';
 import { Position, Sprite, physics, spawnDemo, spawnOnTap, world } from './src/game';
 
 const SPRITE_SIZE = 14;
