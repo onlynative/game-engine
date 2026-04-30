@@ -1,24 +1,33 @@
+import { useEffect, useMemo } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+
+import { GameEngine } from './src/engine';
+import { SkiaRenderer } from './src/engine/renderers/skia';
+import { movement, spawnDemo, world } from './src/game';
 
 export default function App() {
+  const systems = useMemo(() => [movement], []);
+
+  useEffect(() => {
+    if (world.nextId === 0) spawnDemo(150, 360, 720);
+  }, []);
+
   return (
     <GestureHandlerRootView style={styles.root}>
-      <View style={styles.container}>
-        <Text>Game engine scaffold ready.</Text>
-        <StatusBar style="auto" />
-      </View>
+      <SafeAreaProvider>
+        <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+          <GameEngine world={world} systems={systems} renderer={SkiaRenderer} />
+          <StatusBar style="auto" />
+        </SafeAreaView>
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  container: { flex: 1, backgroundColor: '#fff' },
 });

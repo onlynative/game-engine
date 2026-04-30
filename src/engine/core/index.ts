@@ -12,6 +12,7 @@ export type {
   GameEvent,
   System,
   Renderer,
+  RendererProps,
 } from './types';
 
 export { defineComponent } from './component';
@@ -26,3 +27,5 @@ export {
 export type { CreateWorldOptions } from './world';
 export { query } from './query';
 export type { Query } from './query';
+export { createLoop } from './loop';
+export type { Loop, LoopOptions } from './loop';

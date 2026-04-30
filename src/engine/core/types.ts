@@ -79,8 +79,9 @@ export interface GameEvent {
 
 export type System = (world: World, ctx: FrameContext) => void;
 
-export interface Renderer {
-  readonly mount: (world: World) => void;
-  readonly draw: (world: World, alpha: number) => void;
-  readonly unmount: () => void;
+export interface RendererProps {
+  readonly world: World;
 }
+
+import type { ComponentType } from 'react';
+export type Renderer = ComponentType<RendererProps>;
