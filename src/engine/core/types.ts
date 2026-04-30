@@ -21,16 +21,18 @@ export type TypedArrayFor<T extends FieldType> =
 
 export interface Component<S extends ComponentSchema = ComponentSchema> {
   readonly id: number;
+  readonly bit: number;
   readonly schema: S;
   readonly data: ComponentBuffer<S>;
-  readonly has: Uint8Array;
 }
 
 export interface World {
   readonly capacity: number;
-  readonly components: ReadonlyArray<Component>;
+  readonly components: Component[];
   readonly alive: Uint8Array;
   readonly mask: Uint32Array;
+  readonly freeList: Uint32Array;
+  freeCount: number;
   nextId: EntityId;
 }
 
