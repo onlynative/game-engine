@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  type ReactNode,
+} from 'react';
 import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useSharedValue } from 'react-native-reanimated';
@@ -16,6 +24,16 @@ export interface GameEngineProps {
   readonly children?: ReactNode;
 }
 
+const EngineContext = createContext<Loop | null>(null);
+
+export function useEngine(): Loop {
+  const loop = useContext(EngineContext);
+  if (!loop) {
+    throw new Error('useEngine must be called inside <GameEngine>');
+  }
+  return loop;
+}
+
 export function GameEngine({
   world,
   systems,
@@ -27,33 +45,27 @@ export function GameEngine({
   const systemsRef = useRef(systems);
   systemsRef.current = systems;
 
-  const loopRef = useRef<Loop | null>(null);
+  const loop = useMemo(
+    () => createLoop(world, () => systemsRef.current, { hz }),
+    [world, hz],
+  );
 
   useEffect(() => {
-    const loop = createLoop(world, () => systemsRef.current, { hz });
-    loopRef.current = loop;
     if (running) loop.start();
-    return () => {
-      loop.stop();
-      loopRef.current = null;
-    };
-  }, [world, hz]);
-
-  useEffect(() => {
-    const loop = loopRef.current;
-    if (!loop) return;
-    if (running && !loop.isRunning()) loop.start();
-    else if (!running && loop.isRunning()) loop.stop();
-  }, [running]);
+    return () => loop.stop();
+  }, [loop, running]);
 
   const onLayout = (e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
-    loopRef.current?.setScreen(width, height);
+    loop.setScreen(width, height);
   };
 
-  const pushTouch = useCallback((e: TouchEvent) => {
-    loopRef.current?.pushTouch(e);
-  }, []);
+  const pushTouch = useCallback(
+    (e: TouchEvent) => {
+      loop.pushTouch(e);
+    },
+    [loop],
+  );
 
   const prevTx = useSharedValue(0);
   const prevTy = useSharedValue(0);
@@ -95,12 +107,14 @@ export function GameEngine({
   }, [pushTouch, prevTx, prevTy]);
 
   return (
-    <GestureDetector gesture={gesture}>
-      <View style={styles.root} onLayout={onLayout} collapsable={false}>
-        <RendererComponent world={world} />
-        {children}
-      </View>
-    </GestureDetector>
+    <EngineContext.Provider value={loop}>
+      <GestureDetector gesture={gesture}>
+        <View style={styles.root} onLayout={onLayout} collapsable={false}>
+          <RendererComponent world={world} />
+          {children}
+        </View>
+      </GestureDetector>
+    </EngineContext.Provider>
   );
 }
 

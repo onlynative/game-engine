@@ -2,64 +2,75 @@ import {
   Canvas,
   Picture,
   Skia,
-   createPicture,
+  createPicture,
   type SkPicture,
 } from '@shopify/react-native-skia';
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { StyleSheet } from 'react-native';
-import {
-  useDerivedValue,
-  useFrameCallback,
-  useSharedValue,
-} from 'react-native-reanimated';
+import { useDerivedValue, useSharedValue } from 'react-native-reanimated';
 
+import { useEngine } from '../../GameEngine';
 import type { World } from '../../core/types';
 
 export interface SkiaRendererProps {
   readonly world: World;
 }
 
-const SPRITE_SIZE = 6;
+const SPRITE_RADIUS = 3;
 const SPRITE_COLOR = '#4ad';
 const BACKGROUND = '#fafafa';
+const EMPTY = new Float32Array(0);
 
 export function SkiaRenderer({ world }: SkiaRendererProps) {
   const Position = world.components[0];
   if (!Position) {
     throw new Error('SkiaRenderer expects component index 0 to be Position { x: f32, y: f32 }');
   }
-
-  const posX = useSharedValue(Position.data.x as Float32Array);
-  const posY = useSharedValue(Position.data.y as Float32Array);
-  const alive = useSharedValue(world.alive);
-  const mask = useSharedValue(world.mask);
-  const capacity = world.capacity;
   const positionBit = Position.bit;
-  const size = SPRITE_SIZE;
+  const radius = SPRITE_RADIUS;
+
+  const loop = useEngine();
+  const packed = useSharedValue<Float32Array>(EMPTY);
 
   const paint = useMemo(() => {
     const p = Skia.Paint();
     p.setColor(Skia.Color(SPRITE_COLOR));
+    p.setAntiAlias(true);
     return p;
   }, []);
 
-  const renderTick = useSharedValue(0);
-  useFrameCallback(() => {
-    renderTick.value = renderTick.value + 1;
-  });
+  useEffect(() => {
+    return loop.onAfterStep(() => {
+      const n = world.nextId;
+      const alive = world.alive;
+      const mask = world.mask;
+      const px = Position.data.x as Float32Array;
+      const py = Position.data.y as Float32Array;
+      const bit = positionBit;
+
+      let count = 0;
+      for (let i = 0; i < n; i++) {
+        if (alive[i] === 1 && (mask[i] & bit) === bit) count++;
+      }
+      const out = new Float32Array(count * 2);
+      let j = 0;
+      for (let i = 0; i < n; i++) {
+        if (alive[i] === 1 && (mask[i] & bit) === bit) {
+          out[j] = px[i];
+          out[j + 1] = py[i];
+          j += 2;
+        }
+      }
+      packed.value = out;
+    });
+  }, [loop, world, packed, Position, positionBit]);
 
   const picture = useDerivedValue<SkPicture>(() => {
-    renderTick.value;
-    const x = posX.value;
-    const y = posY.value;
-    const a = alive.value;
-    const m = mask.value;
-
+    const arr = packed.value;
     return createPicture((canvas) => {
-      for (let id = 0; id < capacity; id++) {
-        if (a[id] === 1 && (m[id] & positionBit) === positionBit) {
-          canvas.drawRect(Skia.XYWHRect(x[id], y[id], size, size), paint);
-        }
+      const len = arr.length;
+      for (let k = 0; k < len; k += 2) {
+        canvas.drawCircle(arr[k], arr[k + 1], radius, paint);
       }
     });
   });

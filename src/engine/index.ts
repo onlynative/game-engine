@@ -1,5 +1,5 @@
 export * from './core';
-export { GameEngine } from './GameEngine';
+export { GameEngine, useEngine } from './GameEngine';
 export type { GameEngineProps } from './GameEngine';
 export { createPhysics } from './physics';
 export type {

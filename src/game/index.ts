@@ -21,8 +21,7 @@ export const physics = createPhysics({
   world,
   position: Position,
   velocity: Velocity,
-  gravity: { x: 0, y: 20 },
-  pixelsPerMeter: 30,
+  gravity: { x: 0, y: 600 },
 });
 
 const WALL_THICKNESS = 20;
@@ -38,8 +37,8 @@ function spawnBall(x: number, y: number, vx = 0, vy = 0): void {
     position: { x, y },
     velocity: { x: vx, y: vy },
     shape: { kind: 'circle', radius: BALL_RADIUS },
-    restitution: 0.6,
-    friction: 0.1,
+    restitution: 0.4,
+    friction: 0.2,
   });
 }
 

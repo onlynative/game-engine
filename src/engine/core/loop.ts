@@ -19,6 +19,7 @@ export interface Loop {
   readonly setScreen: (width: number, height: number) => void;
   readonly dispatch: (e: GameEvent) => void;
   readonly pushTouch: (e: TouchEvent) => void;
+  readonly onAfterStep: (cb: () => void) => () => void;
 }
 
 const now = (): number =>
@@ -51,6 +52,7 @@ export function createLoop(
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
   let lastWall = 0;
   let acc = 0;
+  const afterStep: Array<() => void> = [];
 
   const step = (): void => {
     ctx.time.previous = ctx.time.current;
@@ -70,9 +72,14 @@ export function createLoop(
     lastWall = wall;
     if (delta > maxCatchUpMs) delta = stepMs;
     acc += delta;
+    let stepped = false;
     while (acc >= stepMs) {
       step();
       acc -= stepMs;
+      stepped = true;
+    }
+    if (stepped) {
+      for (let i = 0; i < afterStep.length; i++) afterStep[i]();
     }
     if (running) {
       timeoutId = setTimeout(tick, Math.max(0, stepMs - acc));
@@ -104,6 +111,13 @@ export function createLoop(
     },
     pushTouch(e): void {
       ctx.input.touches.push(e);
+    },
+    onAfterStep(cb): () => void {
+      afterStep.push(cb);
+      return () => {
+        const i = afterStep.indexOf(cb);
+        if (i >= 0) afterStep.splice(i, 1);
+      };
     },
   };
 }
