@@ -1,6 +1,17 @@
-import { Canvas, Group, Rect, Text, matchFont } from '@shopify/react-native-skia';
-import { useEffect, useState } from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
+import {
+  Canvas,
+  Picture,
+  Skia,
+   createPicture,
+  type SkPicture,
+} from '@shopify/react-native-skia';
+import { useMemo } from 'react';
+import { StyleSheet } from 'react-native';
+import {
+  useDerivedValue,
+  useFrameCallback,
+  useSharedValue,
+} from 'react-native-reanimated';
 
 import type { World } from '../../core/types';
 
@@ -8,52 +19,58 @@ export interface SkiaRendererProps {
   readonly world: World;
 }
 
-const SAMPLE_LIMIT = 200;
-const SAMPLE_HZ = 30;
-
-const fontFamily = Platform.select({ ios: 'Helvetica', default: 'sans-serif' });
-const font = matchFont({ fontFamily, fontSize: 14 });
+const SPRITE_SIZE = 6;
+const SPRITE_COLOR = '#4ad';
+const BACKGROUND = '#fafafa';
 
 export function SkiaRenderer({ world }: SkiaRendererProps) {
-  const [tick, setTick] = useState(0);
+  const Position = world.components[0];
+  if (!Position) {
+    throw new Error('SkiaRenderer expects component index 0 to be Position { x: f32, y: f32 }');
+  }
 
-  useEffect(() => {
-    const id = setInterval(() => setTick((t) => t + 1), 1000 / SAMPLE_HZ);
-    return () => clearInterval(id);
+  const posX = useSharedValue(Position.data.x as Float32Array);
+  const posY = useSharedValue(Position.data.y as Float32Array);
+  const alive = useSharedValue(world.alive);
+  const mask = useSharedValue(world.mask);
+  const capacity = world.capacity;
+  const positionBit = Position.bit;
+  const size = SPRITE_SIZE;
+
+  const paint = useMemo(() => {
+    const p = Skia.Paint();
+    p.setColor(Skia.Color(SPRITE_COLOR));
+    return p;
   }, []);
 
-  const positions = readPositions(world, SAMPLE_LIMIT);
+  const renderTick = useSharedValue(0);
+  useFrameCallback(() => {
+    renderTick.value = renderTick.value + 1;
+  });
+
+  const picture = useDerivedValue<SkPicture>(() => {
+    renderTick.value;
+    const x = posX.value;
+    const y = posY.value;
+    const a = alive.value;
+    const m = mask.value;
+
+    return createPicture((canvas) => {
+      for (let id = 0; id < capacity; id++) {
+        if (a[id] === 1 && (m[id] & positionBit) === positionBit) {
+          canvas.drawRect(Skia.XYWHRect(x[id], y[id], size, size), paint);
+        }
+      }
+    });
+  });
 
   return (
-    <View style={styles.root}>
-      <Canvas style={StyleSheet.absoluteFill}>
-        <Group>
-          {positions.map(({ id, x, y }) => (
-            <Rect key={id} x={x} y={y} width={6} height={6} color="#4ad" />
-          ))}
-        </Group>
-        <Text x={12} y={24} text={`tick ${tick} · drawing ${positions.length} entities`} font={font} color="#222" />
-      </Canvas>
-    </View>
+    <Canvas style={styles.canvas}>
+      <Picture picture={picture} />
+    </Canvas>
   );
 }
 
-function readPositions(world: World, limit: number): Array<{ id: number; x: number; y: number }> {
-  const Position = world.components[0];
-  if (!Position) return [];
-  const x = Position.data.x as Float32Array | undefined;
-  const y = Position.data.y as Float32Array | undefined;
-  if (!x || !y) return [];
-  const out: Array<{ id: number; x: number; y: number }> = [];
-  const max = Math.min(world.nextId, limit);
-  for (let i = 0; i < max; i++) {
-    if (world.alive[i] === 1 && (world.mask[i] & Position.bit) === Position.bit) {
-      out.push({ id: i, x: x[i], y: y[i] });
-    }
-  }
-  return out;
-}
-
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#fafafa' },
+  canvas: { flex: 1, backgroundColor: BACKGROUND },
 });
