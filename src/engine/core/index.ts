@@ -11,8 +11,6 @@ export type {
   FrameContext,
   GameEvent,
   System,
-  Renderer,
-  RendererProps,
 } from './types';
 
 export { defineComponent } from './component';

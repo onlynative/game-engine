@@ -13,12 +13,12 @@ import { useSharedValue } from 'react-native-reanimated';
 import { runOnJS } from 'react-native-worklets';
 
 import { createLoop, type Loop } from './core/loop';
-import type { Renderer, System, TouchEvent, World } from './core/types';
+import type { System, TouchEvent, World } from './core/types';
 
 export interface GameEngineProps {
   readonly world: World;
   readonly systems: ReadonlyArray<System>;
-  readonly renderer: Renderer;
+  readonly renderer: ReactNode;
   readonly running?: boolean;
   readonly hz?: number;
   readonly children?: ReactNode;
@@ -37,7 +37,7 @@ export function useEngine(): Loop {
 export function GameEngine({
   world,
   systems,
-  renderer: RendererComponent,
+  renderer,
   running = true,
   hz = 60,
   children,
@@ -110,7 +110,7 @@ export function GameEngine({
     <EngineContext.Provider value={loop}>
       <GestureDetector gesture={gesture}>
         <View style={styles.root} onLayout={onLayout} collapsable={false}>
-          <RendererComponent world={world} />
+          {renderer}
           {children}
         </View>
       </GestureDetector>
