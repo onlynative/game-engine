@@ -11,6 +11,7 @@ import type { LevelDeps } from '.';
 import { gameStore } from './store';
 
 const MIN_HORIZONTAL_FRACTION = 0.2;
+const MIN_VERTICAL_FRACTION = 0.2;
 
 export interface BuildFns {
   readonly buildLevel: (screenW: number, screenH: number) => { bricksLeft: number };
@@ -119,6 +120,7 @@ export function makeBallBounds(deps: LevelDeps, b: BuildFns): System {
 const SPEED_TARGET = BALL_SPEED;
 const SPEED_TARGET_SQ = SPEED_TARGET * SPEED_TARGET;
 const MIN_HORIZONTAL = SPEED_TARGET * MIN_HORIZONTAL_FRACTION;
+const MIN_VERTICAL = SPEED_TARGET * MIN_VERTICAL_FRACTION;
 
 export function makeBallSpeedClamp(deps: LevelDeps): System {
   const { Velocity, refs } = deps;
@@ -140,6 +142,13 @@ export function makeBallSpeedClamp(deps: LevelDeps): System {
       x = x < 0 ? -MIN_HORIZONTAL : MIN_HORIZONTAL;
       const newY2 = SPEED_TARGET_SQ - x * x;
       y = (y < 0 ? -1 : 1) * Math.sqrt(newY2 > 0 ? newY2 : 0);
+    } else if (Math.abs(y) < MIN_VERTICAL) {
+      // Without this guard, repeated glancing hits on the paddle (friction 0.4)
+      // can drain vy until the ball rattles horizontally between the side walls
+      // forever, never falling far enough to hit the paddle again.
+      y = y < 0 ? -MIN_VERTICAL : MIN_VERTICAL;
+      const newX2 = SPEED_TARGET_SQ - y * y;
+      x = (x < 0 ? -1 : 1) * Math.sqrt(newX2 > 0 ? newX2 : 0);
     }
     vx[id] = x;
     vy[id] = y;

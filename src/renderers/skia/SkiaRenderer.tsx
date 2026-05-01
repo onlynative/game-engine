@@ -3,8 +3,10 @@ import {
   Picture,
   Skia,
   createPicture,
+  type SkHostRect,
   type SkImage,
   type SkPicture,
+  type SkRSXform,
 } from '@shopify/react-native-skia';
 import { useEffect, useMemo } from 'react';
 import { StyleSheet } from 'react-native';
@@ -53,6 +55,14 @@ export function SkiaRenderer({ world, position, sprite, atlases }: SkiaRendererP
     return p;
   }, []);
 
+  // Pools live across worklet runs (Reanimated caches the captured arrays per
+  // closure). They grow monotonically as entity counts climb; setXYWH / set
+  // mutate in place so the inner loop is allocation-free in steady state.
+  const srcPool = useMemo<SkHostRect[]>(() => [], []);
+  const dstPool = useMemo<SkRSXform[]>(() => [], []);
+  const srcDraw = useMemo<SkHostRect[]>(() => [], []);
+  const dstDraw = useMemo<SkRSXform[]>(() => [], []);
+
   useEffect(() => {
     return loop.onAfterStep(() => {
       const n = world.nextId;
@@ -85,19 +95,35 @@ export function SkiaRenderer({ world, position, sprite, atlases }: SkiaRendererP
   const picture = useDerivedValue<SkPicture>(() => {
     const arr = packed.value;
     const list = atlases.value;
+    const len = arr.length;
+    const atlasCount = list.length;
     return createPicture((canvas) => {
-      const len = arr.length;
-      for (let k = 0; k < len; k += STRIDE) {
-        const a = list[arr[k + 2] | 0];
-        if (!a || !a.image) continue;
-        const f = a.frames[arr[k + 3] | 0];
-        if (!f) continue;
-        canvas.drawImageRect(
-          a.image,
-          { x: f.x, y: f.y, width: f.width, height: f.height },
-          { x: arr[k] - f.width * 0.5, y: arr[k + 1] - f.height * 0.5, width: f.width, height: f.height },
-          paint,
-        );
+      if (len === 0 || atlasCount === 0) return;
+      for (let a = 0; a < atlasCount; a++) {
+        const atlasItem = list[a];
+        if (!atlasItem || !atlasItem.image) continue;
+        const frames = atlasItem.frames;
+        let n = 0;
+        for (let k = 0; k < len; k += STRIDE) {
+          if ((arr[k + 2] | 0) !== a) continue;
+          const f = frames[arr[k + 3] | 0];
+          if (!f) continue;
+          if (n >= srcPool.length) {
+            srcPool.push(Skia.XYWHRect(0, 0, 0, 0));
+            dstPool.push(Skia.RSXform(1, 0, 0, 0));
+          }
+          const sf = srcPool[n];
+          const df = dstPool[n];
+          sf.setXYWH(f.x, f.y, f.width, f.height);
+          df.set(1, 0, arr[k] - f.width * 0.5, arr[k + 1] - f.height * 0.5);
+          srcDraw[n] = sf;
+          dstDraw[n] = df;
+          n++;
+        }
+        if (n === 0) continue;
+        if (srcDraw.length !== n) srcDraw.length = n;
+        if (dstDraw.length !== n) dstDraw.length = n;
+        canvas.drawAtlas(atlasItem.image, srcDraw, dstDraw, paint);
       }
     });
   });
