@@ -1,5 +1,5 @@
 {
-  "name": "example",
+  "name": "example-3d",
   "version": "0.0.0",
   "private": true,
   "main": "./index.ts",
@@ -12,7 +12,6 @@
   },
   "dependencies": {
     "@onlynative/game-engine": "workspace:*",
-    "@shopify/react-native-skia": "2.2.12",
     "expo": "~54.0.33",
     "expo-asset": "~12.0.13",
     "expo-file-system": "~19.0.22",
