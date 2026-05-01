@@ -1,0 +1,29 @@
+# @onlynative/game-engine
+
+> A 2D (and soon 3D) ECS-based game engine for React Native that runs inside Expo Go — no custom native modules, no `expo prebuild`. Skia renderer, fixed-timestep simulation on the JS thread, render loop on the UI thread via Reanimated worklets, custom circles + AABB physics, Suspense-friendly asset loader.
+
+The engine is split into a renderer-agnostic core (ECS, world, loop, input, assets, math) and pluggable renderers under subpath imports. Phase 1 ships `<SkiaRenderer>`; Phase 2 will add `expo-gl` + three.js behind the same engine core. Entities are integer ids; components are TypedArray-backed schemas; queries are O(N) bitmask scans. The simulation runs on the JS thread at a fixed 60 Hz timestep, while the render side runs as Reanimated worklets on the UI thread, reading shared snapshots — there is no React reconciliation per frame.
+
+For a runnable minimal example, see the README.
+
+## Overview
+
+- [README](https://unpkg.com/@onlynative/game-engine/README.md): Install, peer deps, and a minimal end-to-end example covering world setup, physics, sprites, and the `<GameEngine>` mount.
+- [Documentation index](https://unpkg.com/@onlynative/game-engine/docs/README.md): Top-level table of contents for the API reference and concept docs.
+
+## Concepts
+
+- [Architecture](https://unpkg.com/@onlynative/game-engine/docs/concepts.md): The two-loop split (sim on JS thread, render on UI thread), ECS rationale, fixed timestep, performance rules, and deliberate departures from naive `requestAnimationFrame` + `setState` game loops.
+
+## API reference
+
+- [Core](https://unpkg.com/@onlynative/game-engine/docs/api-core.md): `createWorld`, `defineComponent`, entity lifecycle (`createEntity`, `destroyEntity`, `addComponent`, `removeComponent`, `hasComponent`), `query`, `createLoop`, the `System` and `FrameContext` types, touch event taxonomy.
+- [`<GameEngine>` and `useEngine`](https://unpkg.com/@onlynative/game-engine/docs/api-game-engine.md): React mount component, props, gesture-driven input pipeline, layout/screen propagation, lifecycle.
+- [Physics](https://unpkg.com/@onlynative/game-engine/docs/api-physics.md): `createPhysics`, `BodyDef`, `BodyShape`, the custom circles + AABB solver, friction/restitution rules, and current limitations (no rotation, no joints, O(N²) broadphase).
+- [Assets](https://unpkg.com/@onlynative/game-engine/docs/api-assets.md): `loadAsset`, `useAsset`, `clearAssetCache`, the bundled-vs-remote source model, Suspense semantics, and disk-cache caveats.
+- [Skia renderer](https://unpkg.com/@onlynative/game-engine/docs/api-renderer-skia.md): `<SkiaRenderer>`, `SkiaSprite`, the worklet snapshot/draw pipeline, atlas indexing, and what is and isn't yet wired (`frame`, `tint`, rotation).
+
+## Optional
+
+- [Full documentation, inlined for offline use](https://unpkg.com/@onlynative/game-engine/llms-full.txt): All of the above concatenated into a single file. Useful when fetching individual links isn't possible (offline, sandboxed LLM contexts, or after `npm install` without network access).
+- [Repository](https://github.com/onlynative/game-engine): Source, issues, and the in-repo `example/` Expo Go app.

@@ -1,0 +1,1249 @@
+# @onlynative/game-engine — full documentation
+
+> Concatenated for offline LLM ingestion. This file inlines the README and every doc under docs/. Each section below is delimited by a divider and labelled with its source path. Internal markdown links between docs (e.g. `./api-core.md`) refer to other sections in this same file.
+
+Contents:
+
+1. README.md — install, peer deps, minimal example
+2. docs/README.md — documentation index
+3. docs/concepts.md — architecture
+4. docs/api-core.md — core API
+5. docs/api-game-engine.md — `<GameEngine>` and `useEngine`
+6. docs/api-physics.md — physics
+7. docs/api-assets.md — assets
+8. docs/api-renderer-skia.md — Skia renderer
+
+
+================================================================================
+# Source: README.md
+================================================================================
+
+# @onlynative/game-engine
+
+A 2D (and soon 3D) game engine for React Native built to run inside **Expo Go** — no custom native modules, no `expo prebuild`, no config plugins.
+
+- **ECS core** — integer entity ids, TypedArray-backed component buffers, bitmask queries
+- **Two-loop architecture** — fixed-timestep simulation on the JS thread, render loop on the UI thread
+- **Skia renderer** — single `<Canvas>` driven by Reanimated worklets; no React reconciliation per frame
+- **Physics** — custom circles + AABB solver tailored to arcade games (no rotation, no joints, ~5–10× faster than a JS Box2D port for stacked-circle workloads)
+- **Asset pipeline** — bundled (`require`) and remote (URL) assets behind one Suspense-friendly API
+- **Input** — Gesture Handler's modern Gesture API on the UI thread
+
+> **Status: 0.1.x — pre-1.0.** APIs may shift. Phase 1 (2D) is functionally complete and dogfooded in the demo app in this repo. Phase 2 (`expo-gl` + three.js) lands behind the same engine core without a rewrite.
+
+## Install
+
+```sh
+yarn add @onlynative/game-engine
+npx expo install \
+  @shopify/react-native-skia \
+  expo-asset \
+  expo-file-system \
+  react-native-gesture-handler \
+  react-native-reanimated \
+  react-native-worklets
+```
+
+All of the above are **peer dependencies** — your Expo app owns the SDK version. Keep `react-native-worklets/plugin` as the **last** plugin in `babel.config.js`:
+
+```js
+// babel.config.js
+module.exports = function (api) {
+  api.cache(true);
+  return {
+    presets: ['babel-preset-expo'],
+    plugins: ['react-native-worklets/plugin'],
+  };
+};
+```
+
+Wrap your app root with `GestureHandlerRootView` (Gesture Handler requirement).
+
+## Minimal example
+
+```tsx
+import { useMemo } from 'react';
+import { useDerivedValue } from 'react-native-reanimated';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { useImageAsTexture } from '@shopify/react-native-skia';
+import {
+  GameEngine,
+  addComponent,
+  createEntity,
+  createPhysics,
+  createWorld,
+  defineComponent,
+  type System,
+} from '@onlynative/game-engine';
+import { SkiaRenderer, type SkiaSprite } from '@onlynative/game-engine/renderers/skia';
+
+const world = createWorld({ capacity: 1024 });
+const Position = defineComponent(world, { x: 'f32', y: 'f32' });
+const Velocity = defineComponent(world, { x: 'f32', y: 'f32' });
+const Sprite = defineComponent(world, { atlas: 'u32', frame: 'u16', tint: 'u32' });
+
+const physics = createPhysics({
+  world,
+  position: Position,
+  velocity: Velocity,
+  gravity: { x: 0, y: 600 },
+});
+
+const id = createEntity(world);
+addComponent(world, id, Sprite, { atlas: 0, frame: 0, tint: 0xffffffff });
+physics.attach(id, {
+  type: 'dynamic',
+  position: { x: 100, y: 50 },
+  velocity: { x: 0, y: 0 },
+  shape: { kind: 'circle', radius: 8 },
+});
+
+export default function App() {
+  const tex = useImageAsTexture(require('./assets/ball.png'));
+  const images = useDerivedValue<ReadonlyArray<SkiaSprite>>(() => [
+    { image: tex.value, width: 16, height: 16 },
+  ]);
+  const systems = useMemo<ReadonlyArray<System>>(() => [physics.step], []);
+
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <GameEngine
+        world={world}
+        systems={systems}
+        renderer={
+          <SkiaRenderer
+            world={world}
+            position={Position}
+            sprite={Sprite}
+            images={images}
+          />
+        }
+      />
+    </GestureHandlerRootView>
+  );
+}
+```
+
+## Subpath exports
+
+| Import | Contains |
+| --- | --- |
+| `@onlynative/game-engine` | ECS, world, loop, `<GameEngine>`, physics, asset loader |
+| `@onlynative/game-engine/renderers/skia` | `<SkiaRenderer>`, `SkiaSprite` |
+
+The renderer split is structural: phase 2 will add `@onlynative/game-engine/renderers/three`, which depends on `expo-gl` and `expo-three`. Keeping renderers behind subpath imports means consumers never pay for a renderer they don't use.
+
+## Constraints
+
+- **Expo Go only on the supported path.** Custom dev builds work too, but the engine deliberately avoids anything that would force one.
+- **Hermes is the JS engine.** No WebAssembly. That rules out `rapier`/`box2d-wasm`-style physics.
+- **Single-touch input today.** Gesture pointer ids are hardcoded to `0` — multi-touch is on the roadmap.
+- **Naive O(N²) broadphase.** Comfortable up to ~200 dynamic bodies; spatial-hash broadphase will land before pushing past that.
+
+## License
+
+MIT
+
+================================================================================
+# Source: docs/README.md
+================================================================================
+
+# Documentation
+
+API reference and concept docs for `@onlynative/game-engine`.
+
+For install + a runnable minimal example, see the [repo root README](../README.md).
+
+## Concepts
+
+- [Architecture](./concepts.md) — the two-loop split, ECS rationale, fixed timestep, why no React per frame.
+
+## API reference
+
+- [Core](./api-core.md) — `createWorld`, `defineComponent`, entity lifecycle, `query`, `createLoop`, `System`, `FrameContext`.
+- [`<GameEngine>`](./api-game-engine.md) — mount component, `useEngine`.
+- [Physics](./api-physics.md) — `createPhysics`, `BodyDef`, body shapes.
+- [Assets](./api-assets.md) — `loadAsset`, `useAsset`, `clearAssetCache`.
+- [Skia renderer](./api-renderer-skia.md) — `<SkiaRenderer>`, `SkiaSprite`.
+
+## Subpath imports
+
+| Import | Module |
+| --- | --- |
+| `@onlynative/game-engine` | ECS, world, loop, `<GameEngine>`, physics, asset loader |
+| `@onlynative/game-engine/renderers/skia` | `<SkiaRenderer>`, `SkiaSprite` |
+
+================================================================================
+# Source: docs/concepts.md
+================================================================================
+
+# Architecture
+
+The engine is built around four ideas that follow from one constraint: **must run inside Expo Go on Hermes, hitting 60 FPS on mid-tier devices.** No native modules, no `expo prebuild`, no WebAssembly.
+
+## 1. Two-loop split
+
+The engine runs **two loops** that share state through Reanimated shared values, not events:
+
+| Loop | Thread | Cadence | Job |
+| --- | --- | --- | --- |
+| **Simulation** | JS thread | Fixed timestep (default 60 Hz) | Run systems, mutate component buffers, step physics |
+| **Render** | UI thread | Display rate (worklets via `useFrameCallback` / `useDerivedValue`) | Read component buffers, draw |
+
+They never block each other. The render loop reads the latest snapshot the sim has produced and interpolates between the previous and current state with `ctx.time.alpha`. If the JS thread hiccups, rendering stays at display rate; if rendering stalls, the sim still ticks at 60 Hz.
+
+This decoupling is the point. A naive `requestAnimationFrame` + `setState` loop ties simulation and rendering to one thread (JS) and forces React to reconcile on every frame. That's the bottleneck the engine is shaped to avoid.
+
+## 2. ECS with TypedArray-backed components
+
+Entities are integer ids. Components are **schemas** bound to a world; the world allocates one TypedArray per field, sized to the world's capacity, and indexes by entity id.
+
+```ts
+const Position = defineComponent(world, { x: 'f32', y: 'f32' });
+// Position.data.x[id], Position.data.y[id]
+```
+
+Why this shape:
+
+- **Zero per-entity allocation in systems.** A movement system is a tight `for` loop over a TypedArray — no object property lookups, no garbage.
+- **Cache-friendly iteration.** All `x` values live contiguously, all `y` values live contiguously.
+- **Renderer iterates the same buffers.** No copy, no serialization between sim and render.
+- **TypeScript stays the source of truth.** The schema's field types flow through to `Component<S>['data']`.
+
+Trade-offs:
+
+- **Maximum 32 components per world.** Component membership is a bit in a `Uint32Array` mask, one bit per component. Wide enough for any single game.
+- **Capacity is fixed at world creation.** `createWorld({ capacity: 1024 })` allocates buffers up-front. Pick a capacity that fits the level; entities recycle through a free list.
+
+## 3. Bitmask queries
+
+`query(world, A, B).each(fn)` builds a mask of `A.bit | B.bit`, then scans `[0, world.nextId)` and calls `fn(id)` for every alive entity whose component mask matches.
+
+```ts
+const movement: System = (world, ctx) => {
+  const dt = ctx.time.delta;
+  const px = Position.data.x;
+  const py = Position.data.y;
+  const vx = Velocity.data.x;
+  const vy = Velocity.data.y;
+  query(world, Position, Velocity).each((id) => {
+    px[id] += vx[id] * dt;
+    py[id] += vy[id] * dt;
+  });
+};
+```
+
+Bitmask scans are O(N) over the world capacity per query. Archetype-based queries (one bucket per component combination) are a phase-1.5 optimization gated on profiling — the public API stays the same.
+
+## 4. Renderer is pluggable
+
+The engine core never imports Skia or three. A renderer is just a React component that:
+
+1. Reads component buffers (typically by subscribing via `loop.onAfterStep`).
+2. Pushes a snapshot into a `SharedValue`.
+3. Draws inside a worklet.
+
+Phase 1 ships [`<SkiaRenderer>`](./api-renderer-skia.md). Phase 2 will add `<ThreeRenderer>` (`expo-gl` + `expo-three`) under a separate subpath import. Switching renderers does not require changing systems, queries, or component layout.
+
+## What lives where
+
+```
+src/
+  core/         ECS, loop, types  ← renderer-agnostic
+  GameEngine.tsx                   ← React mount + input plumbing
+  physics/      Custom AABB + circles solver
+  assets/       Bundled + remote asset loader (Suspense-friendly)
+  renderers/
+    skia/       Phase 1 renderer
+    three/      Phase 2 (planned)
+```
+
+## Performance rules the engine enforces
+
+- **No React re-renders during gameplay.** HUD/menus use React state; gameplay does not.
+- **No allocations in the hot loop.** Systems read and write into pre-allocated TypedArrays.
+- **Sim and render share buffers.** No copying, no serialization.
+- **Render-side code runs as worklets.** Sim runs on the JS thread. They communicate only through shared TypedArray buffers — never via per-frame `runOnJS` / `runOnUI` calls.
+
+## Why not...
+
+- **`requestAnimationFrame` + `setState`** — couples simulation and rendering to the JS thread; reconciles React per frame.
+- **A React tree per entity** — reconciliation cost grows linearly with entity count.
+- **Map of plain-object entities** — pointer chasing, GC churn, no chance of contiguous memory.
+- **Box2D port (planck, matter.js)** — solver dominates frame time once ~80 dynamic circles stack at a wall. The custom solver does only what arcade games need (circles + AABBs, no rotation, no joints) and runs 5–10× faster on those workloads. WASM physics is ruled out by Hermes.
+
+================================================================================
+# Source: docs/api-core.md
+================================================================================
+
+# Core API
+
+```ts
+import {
+  createWorld,
+  defineComponent,
+  createEntity,
+  destroyEntity,
+  addComponent,
+  removeComponent,
+  hasComponent,
+  query,
+  createLoop,
+} from '@onlynative/game-engine';
+```
+
+Everything here is renderer-agnostic. The same imports work whether you render with Skia today or `expo-gl` + three.js later.
+
+---
+
+## Worlds
+
+### `createWorld(options)`
+
+```ts
+function createWorld(options: { capacity: number }): World;
+```
+
+Allocates a world with a fixed entity capacity. All component buffers in this world will be sized to `capacity`.
+
+```ts
+const world = createWorld({ capacity: 1024 });
+```
+
+- **`capacity`** must be a positive integer. Throws otherwise.
+- Pick a capacity that fits the largest level. Entities recycle through a free list, so you only need to size for the peak count of simultaneously-alive entities.
+
+### Entity lifecycle
+
+```ts
+function createEntity(world: World): EntityId;
+function destroyEntity(world: World, id: EntityId): void;
+```
+
+`createEntity` returns the next free integer id (popped from the free list when available, otherwise a fresh id). Throws if `world.nextId` reaches `capacity` and the free list is empty.
+
+`destroyEntity` clears the entity's component mask and pushes its slot onto the free list. Calling it on a destroyed or never-allocated id is a no-op.
+
+```ts
+const id = createEntity(world);
+// ...
+destroyEntity(world, id);
+```
+
+### `World` shape
+
+```ts
+interface World {
+  readonly capacity: number;
+  readonly components: Component[];
+  readonly alive: Uint8Array;       // 1 = alive, 0 = dead
+  readonly mask: Uint32Array;       // component bitmask per entity
+  readonly freeList: Uint32Array;
+  freeCount: number;
+  nextId: EntityId;                 // high-water mark
+}
+```
+
+You rarely touch `World` fields directly. Renderers and physics step internally iterate `[0, world.nextId)`, gating on `alive[id] === 1` and the component mask.
+
+---
+
+## Components
+
+### `defineComponent(world, schema)`
+
+```ts
+type FieldType = 'f32' | 'f64' | 'i8' | 'i16' | 'i32' | 'u8' | 'u16' | 'u32';
+
+function defineComponent<S extends Record<string, FieldType>>(
+  world: World,
+  schema: S,
+): Component<S>;
+```
+
+Declares a component on a world. Allocates one TypedArray per field, sized to `world.capacity`, and assigns the next free bit (0..31) to the component.
+
+```ts
+const Position = defineComponent(world, { x: 'f32', y: 'f32' });
+const Velocity = defineComponent(world, { x: 'f32', y: 'f32' });
+const Sprite   = defineComponent(world, { atlas: 'u32', frame: 'u16', tint: 'u32' });
+
+Position.data.x[id]; // Float32Array
+Position.data.y[id]; // Float32Array
+Sprite.data.atlas[id]; // Uint32Array
+```
+
+- **Maximum 32 components per world.** Throws if you exceed it.
+- The order in which you call `defineComponent` determines the bit each component gets, which determines the order they're stored in `world.components`.
+- The schema flows into `Component<S>['data']`, so reading `Position.data.x` gives you a typed `Float32Array`.
+
+### `Component<S>` shape
+
+```ts
+interface Component<S extends ComponentSchema> {
+  readonly id: number;            // index into world.components
+  readonly bit: number;           // 1 << id
+  readonly schema: S;
+  readonly data: { readonly [K in keyof S]: TypedArrayFor<S[K]> };
+}
+```
+
+### `addComponent(world, id, component, values?)`
+
+```ts
+function addComponent<S>(
+  world: World,
+  id: EntityId,
+  component: Component<S>,
+  values?: Partial<{ readonly [K in keyof S]: number }>,
+): void;
+```
+
+Sets the component's bit on `world.mask[id]` and writes initial values into the component's TypedArrays. Missing fields default to `0`.
+
+```ts
+addComponent(world, id, Position, { x: 100, y: 50 });
+addComponent(world, id, Velocity);                    // x = 0, y = 0
+```
+
+Calling `addComponent` again for the same entity overwrites the row.
+
+### `removeComponent(world, id, component)` / `hasComponent(world, id, component)`
+
+```ts
+function removeComponent(world: World, id: EntityId, component: Component): void;
+function hasComponent(world: World, id: EntityId, component: Component): boolean;
+```
+
+O(1) bitmask ops. `removeComponent` does **not** zero the component's data — the row will be reused if the component is re-added.
+
+---
+
+## Queries
+
+### `query(world, ...components)`
+
+```ts
+function query(world: World, ...components: Component[]): Query;
+
+interface Query {
+  each(fn: (id: EntityId) => void): void;
+}
+```
+
+Builds a mask from the listed components, then scans `[0, world.nextId)` and invokes `fn(id)` for every alive entity whose mask matches all of them.
+
+```ts
+const movement: System = (world, ctx) => {
+  const dt = ctx.time.delta;
+  query(world, Position, Velocity).each((id) => {
+    Position.data.x[id] += Velocity.data.x[id] * dt;
+    Position.data.y[id] += Velocity.data.y[id] * dt;
+  });
+};
+```
+
+The callback only receives the id. You read and write through the components' typed buffers — no per-entity object allocation, no archetype lookup.
+
+### Query performance
+
+- **Cost is O(world.nextId)** per `each` call. The mask check is two ANDs and a compare.
+- Calling `query()` itself is essentially free (just OR-ing bits).
+- A typical system iterates two or three queries per tick. Hoisting buffer references to locals (`const px = Position.data.x;`) above the `each` is a small but real speedup.
+
+---
+
+## Systems
+
+```ts
+type System = (world: World, ctx: FrameContext) => void;
+```
+
+A system is a plain function. The simulation loop calls every system in order, once per fixed timestep, with the current world and frame context. No return value — systems mutate buffers in place.
+
+Conventions:
+
+- **Run on the JS thread.** Systems can use any JS — third-party libs (`planck`, custom solvers, AI) all live here.
+- **Allocation-free in the hot path.** Pre-allocate vectors, pool entities, hoist buffer references.
+- **No `runOnJS` / `runOnUI` per frame.** The render side picks up state through shared buffers; you don't need to bridge.
+
+---
+
+## Frame context
+
+```ts
+interface FrameContext {
+  readonly time: {
+    readonly current: number;     // sim seconds since loop.start()
+    readonly previous: number;    // value of `current` last tick
+    readonly delta: number;       // fixed step in seconds (e.g. 1/60)
+    readonly alpha: number;       // interpolation factor, used by renderers
+  };
+  readonly input: {
+    readonly touches: ReadonlyArray<TouchEvent>;
+    readonly pointers: ReadonlyArray<Pointer>;
+  };
+  readonly screen: { readonly width: number; readonly height: number };
+  readonly events: ReadonlyArray<GameEvent>;
+  readonly dispatch: (e: GameEvent) => void;
+}
+```
+
+- **`time.delta`** is the fixed step (default `1/60`s). Use it to integrate velocities — it does **not** change frame to frame.
+- **`time.alpha`** is for renderers to interpolate between two simulation states. Systems normally ignore it.
+- **`input.touches`** is drained at the end of every step. Read events early in your system list.
+- **`screen`** is set from the `<GameEngine>` view's `onLayout`.
+- **`dispatch(event)`** queues a `GameEvent` for the *current* tick. `events` is drained at end of step.
+
+### Touch events
+
+```ts
+interface TouchEvent {
+  readonly id: number;            // pointer id (currently always 0)
+  readonly type: 'start' | 'end' | 'move' | 'tap' | 'long-press';
+  readonly x: number;
+  readonly y: number;
+  readonly dx?: number;           // present on 'move'
+  readonly dy?: number;
+  readonly t: number;             // wall-clock ms
+}
+```
+
+Sourced from Gesture Handler's modern `Gesture.Pan` / `Gesture.Tap` / `Gesture.LongPress`. Multi-touch is not yet wired — `id` is hardcoded to `0`.
+
+---
+
+## Loop
+
+You usually don't construct the loop yourself — `<GameEngine>` does it for you. Use `createLoop` directly only when embedding the engine without the React mount.
+
+### `createLoop(world, systems, options?)`
+
+```ts
+function createLoop(
+  world: World,
+  systems: ReadonlyArray<System>,
+  options?: { hz?: number; maxCatchUpMs?: number },
+): Loop;
+```
+
+- **`hz`** — fixed-timestep rate. Default `60`.
+- **`maxCatchUpMs`** — accumulator cap. If wall-clock delta exceeds this (e.g. tab backgrounded), the loop discards the excess and treats the gap as one step. Default `250`ms.
+
+### `Loop` shape
+
+```ts
+interface Loop {
+  start(): void;
+  stop(): void;
+  pause(): void;
+  resume(): void;
+  isRunning(): boolean;
+  isPaused(): boolean;
+  swap(world: World, systems: ReadonlyArray<System>): void;
+  setScreen(width: number, height: number): void;
+  dispatch(e: GameEvent): void;
+  pushTouch(e: TouchEvent): void;
+  onAfterStep(cb: () => void): () => void;
+}
+```
+
+- **`start` / `stop` / `pause` / `resume`** — self-explanatory. `stop` clears any pending tick.
+- **`swap(world, systems)`** — atomically replaces both. Used for level transitions; the next tick runs against the new world. The accumulator and pending events/touches are cleared.
+- **`setScreen(w, h)`** — write into `ctx.screen`.
+- **`dispatch(e)`** — same as `ctx.dispatch` but callable from outside a system.
+- **`pushTouch(e)`** — enqueue a touch event for the next tick. `<GameEngine>` calls this from gesture worklets via `runOnJS`.
+- **`onAfterStep(cb)`** — register a callback that runs **once per frame** that produced at least one step (not once per step). Returns an unsubscribe function. Renderers use this to grab a snapshot of the world after the sim has settled.
+
+### Timing model
+
+The loop runs a `setTimeout`-driven accumulator on the JS thread:
+
+1. On each tick, compute `wallDelta = now() - lastWall`.
+2. If `wallDelta > maxCatchUpMs`, clamp to one step (avoid runaway catch-up after a freeze).
+3. Add to accumulator. While `acc >= stepMs`, call `step()` and subtract.
+4. After all steps for this tick, fire `onAfterStep` callbacks **once** (not per step).
+5. Schedule the next tick to land at the next step boundary.
+
+`time.delta` is always the fixed step in seconds — never the wall delta — so physics integration is stable regardless of frame-time jitter.
+
+================================================================================
+# Source: docs/api-game-engine.md
+================================================================================
+
+# `<GameEngine>` and `useEngine`
+
+```ts
+import { GameEngine, useEngine } from '@onlynative/game-engine';
+```
+
+`<GameEngine>` is the React mount point for the engine. It owns the simulation [`Loop`](./api-core.md#loop), wires gesture-based input into the loop's touch queue, and propagates layout size into `ctx.screen`. The renderer is passed in as a child node so engine core stays renderer-agnostic.
+
+---
+
+## `<GameEngine>` props
+
+```ts
+interface GameEngineProps {
+  readonly world: World;
+  readonly systems: ReadonlyArray<System>;
+  readonly renderer: ReactNode;
+  readonly running?: boolean;          // default true
+  readonly hz?: number;                // default 60
+  readonly children?: ReactNode;       // HUD, menus, overlays
+}
+```
+
+### `world`
+
+The [world](./api-core.md#worlds) the loop drives. The loop is created once on mount; passing a new `world` reference triggers an internal `loop.swap(world, systems)` on the next render — the loop is **not** torn down and recreated.
+
+### `systems`
+
+The system list to run each fixed step, in order. Like `world`, replacing the array calls `loop.swap`.
+
+> Wrap `systems` in `useMemo` so identity is stable across renders. A fresh array reference every render does extra `swap` calls — harmless but wasteful.
+
+### `renderer`
+
+A `ReactNode` rendered inside the gesture detector. Phase 1 ships [`<SkiaRenderer>`](./api-renderer-skia.md); Phase 2 will add `<ThreeRenderer>`. Anything that reads component buffers and draws is fair game.
+
+```tsx
+renderer={
+  <SkiaRenderer
+    world={world}
+    position={Position}
+    sprite={Sprite}
+    images={images}
+  />
+}
+```
+
+### `running` (default `true`)
+
+Controls the loop's start/stop. Toggling from `true` → `false` calls `loop.stop()`. The loop is also stopped on unmount.
+
+> `running` is a pause-equivalent today. To pause without tearing down (preserving accumulator + handlers), call `useEngine().pause()` / `.resume()` instead.
+
+### `hz` (default `60`)
+
+Fixed-timestep rate in Hz. Passed straight to `createLoop`. **Changing `hz` after mount has no effect** — the loop is memoized on `hz` only and is not recreated on world/systems change.
+
+### `children`
+
+Rendered **above** `renderer` inside the same root view. Use this for HUD, menus, debug overlays — anything that uses normal React state.
+
+```tsx
+<GameEngine world={world} systems={systems} renderer={<SkiaRenderer .../>}>
+  <HUD score={score} lives={lives} />
+</GameEngine>
+```
+
+---
+
+## `useEngine()`
+
+```ts
+function useEngine(): Loop;
+```
+
+Returns the live [`Loop`](./api-core.md#loop-shape) instance from the nearest `<GameEngine>`. Throws if called outside one.
+
+```tsx
+function PauseButton() {
+  const loop = useEngine();
+  return (
+    <Pressable onPress={() => (loop.isPaused() ? loop.resume() : loop.pause())}>
+      <Text>{loop.isPaused() ? 'Resume' : 'Pause'}</Text>
+    </Pressable>
+  );
+}
+```
+
+Common uses:
+
+- **HUD pause / resume** — call `loop.pause()` / `loop.resume()`.
+- **Level transitions** — call `loop.swap(nextWorld, nextSystems)` directly. (Setting new `world` / `systems` props on `<GameEngine>` does the same thing.)
+- **Subscribing to step events** — `loop.onAfterStep(cb)` to drive a renderer or external sink. Always store and call the returned unsubscribe function in a `useEffect` cleanup.
+
+---
+
+## Input pipeline
+
+`<GameEngine>` wraps its content in a `<GestureDetector>` composed of three modern Gestures:
+
+| Gesture | Emits |
+| --- | --- |
+| `Gesture.Pan` | `start` (on begin), `move` (on update, with `dx`/`dy`), `end` |
+| `Gesture.Tap` | `tap` |
+| `Gesture.LongPress` | `long-press` |
+
+All three run **simultaneously** (`Gesture.Simultaneous`) on the UI thread. Each gesture handler is a worklet that calls `runOnJS(loop.pushTouch)` to enqueue a [`TouchEvent`](./api-core.md#touch-events) for the next sim step.
+
+The sim loop drains `ctx.input.touches` at the end of every step, so each event is visible to systems in exactly one tick.
+
+> Pointer ids are hardcoded to `0`. Multi-touch isn't wired yet — `Pan` / `Tap` / `LongPress` from Gesture Handler don't expose individual pointers.
+
+---
+
+## Layout
+
+`<GameEngine>` renders a flexed root `<View>` (`flex: 1`) with `collapsable={false}` so Reanimated worklets keep a stable native handle. The view's `onLayout` writes into `ctx.screen` via `loop.setScreen(width, height)`.
+
+If you mount `<GameEngine>` inside a non-flexed container, give it explicit width/height — otherwise `ctx.screen` will be `{ width: 0, height: 0 }`.
+
+> **Wrap your app root with `GestureHandlerRootView`** at the top of your tree. This is a Gesture Handler requirement, not a `<GameEngine>` thing — without it, no gestures fire.
+
+---
+
+## Lifecycle
+
+1. **Mount.** `<GameEngine>` calls `createLoop(world, systems, { hz })`, memoized on `hz`.
+2. **First effect.** `loop.swap(world, systems)` is called once to bind the world and systems.
+3. **Running effect.** If `running` is true, `loop.start()`. The cleanup runs `loop.stop()`.
+4. **Re-render with new `world` or `systems`.** Triggers another `loop.swap`. The loop keeps running; the next tick uses the new state.
+5. **Unmount.** `loop.stop()` runs from the `running` effect's cleanup. Pending timeouts are cleared.
+
+The loop is **not** destroyed on `running={false}` — it's just stopped. If you want a hard reset, unmount `<GameEngine>` and remount with a new `world`.
+
+================================================================================
+# Source: docs/api-physics.md
+================================================================================
+
+# Physics
+
+```ts
+import { createPhysics } from '@onlynative/game-engine';
+import type {
+  Physics,
+  PhysicsOptions,
+  BodyDef,
+  BodyShape,
+  BodyComponent,
+  Position2D,
+  Velocity2D,
+} from '@onlynative/game-engine';
+```
+
+A custom **circles + axis-aligned-box** solver built directly on the ECS TypedArrays. Roughly 250 lines, allocation-free in the hot loop, ~5–10× faster than a JS Box2D port for circle-stacking workloads.
+
+**What it does:** position-separation, restitution impulse, Coulomb friction. Single-pass resolution per contact.
+
+**What it doesn't do:** rotational dynamics, joints, polygons, continuous collision detection. If your game needs any of these, the `Physics` interface is small enough to back with planck behind the same shape.
+
+---
+
+## `createPhysics(options)`
+
+```ts
+function createPhysics(options: PhysicsOptions): Physics;
+
+interface PhysicsOptions {
+  readonly world: World;
+  readonly position: Position2D;            // Component<{ x: 'f32'; y: 'f32' }>
+  readonly velocity: Velocity2D;            // Component<{ x: 'f32'; y: 'f32' }>
+  readonly gravity?: { readonly x: number; readonly y: number };  // default { x: 0, y: 600 }
+}
+```
+
+Defines a `Body` component on the world (so this counts toward the 32-component limit) and returns a `Physics` instance you wire into the system list.
+
+```ts
+const Position = defineComponent(world, { x: 'f32', y: 'f32' });
+const Velocity = defineComponent(world, { x: 'f32', y: 'f32' });
+
+const physics = createPhysics({
+  world,
+  position: Position,
+  velocity: Velocity,
+  gravity: { x: 0, y: 600 }, // px/s² downward
+});
+
+const systems = [physics.step];
+```
+
+- Gravity defaults to `(0, 600)` px/s². Pass `{ x: 0, y: 0 }` to disable.
+- All values are in **pixels and seconds**. No meters/PPM conversion.
+
+---
+
+## `Physics`
+
+```ts
+interface Physics {
+  readonly body: BodyComponent;
+  readonly attach: (id: EntityId, def: BodyDef) => void;
+  readonly detach: (id: EntityId) => void;
+  readonly step: System;
+  readonly destroy: () => void;
+}
+```
+
+### `body`
+
+The `Body` component this physics instance defined. Useful if you need to query against it directly (`hasComponent(world, id, physics.body)`).
+
+```ts
+type BodyComponent = Component<{
+  type: 'u8';      // 0 = static, 1 = dynamic
+  shape: 'u8';     // 0 = circle, 1 = box
+  halfW: 'f32';
+  halfH: 'f32';    // equals halfW for circles
+  invMass: 'f32';  // 0 for static
+  rest: 'f32';     // restitution
+  fric: 'f32';     // friction
+}>;
+```
+
+### `attach(id, def)`
+
+Adds `Position`, `Velocity`, and `Body` components to `id` and writes the body's static row.
+
+```ts
+physics.attach(id, {
+  type: 'dynamic',
+  position: { x: 100, y: 50 },
+  velocity: { x: 0, y: 0 },     // optional, defaults to zero
+  shape: { kind: 'circle', radius: 8 },
+  // mass:        derived from area if omitted
+  // friction:    0
+  // restitution: 0
+});
+```
+
+If the entity already had any of these components, the row is overwritten.
+
+### `detach(id)`
+
+Removes the `Body` component from `id`. `Position` and `Velocity` are left in place — other systems often still need them.
+
+```ts
+physics.detach(id);
+```
+
+You don't have to `detach` before `destroyEntity`. The `step` skips dead entities; the body row is recycled when the slot is reused.
+
+### `step`
+
+The `System` you put in your system list. Runs one fixed timestep per call:
+
+1. Reap dead entities from the dynamic / static work lists.
+2. Integrate dynamic bodies (gravity + velocity → position).
+3. Resolve dynamic-vs-static contacts.
+4. Resolve dynamic-vs-dynamic contacts (O(N²) broadphase).
+5. Each contact: positional separation by inverse-mass ratio, restitution impulse, Coulomb friction (clamped to `μ * j_normal`).
+
+Cost is dominated by the O(N²) pair loop. Comfortable up to ~200 dynamic bodies. Replace with a uniform spatial hash before pushing past that — the `step` interface stays the same.
+
+### `destroy()`
+
+Clears the internal work lists. Call from a cleanup path if you're tearing down the world; not required for normal use.
+
+---
+
+## `BodyDef`
+
+```ts
+interface BodyDef {
+  readonly type: 'static' | 'dynamic';
+  readonly position: { readonly x: number; readonly y: number };
+  readonly velocity?: { readonly x: number; readonly y: number };
+  readonly shape: BodyShape;
+  readonly mass?: number;          // dynamic only
+  readonly friction?: number;      // 0..1, default 0
+  readonly restitution?: number;   // 0..1, default 0 (1 = perfectly elastic)
+}
+```
+
+### `type: 'static' | 'dynamic'`
+
+- **`static`** — never integrated, infinite mass (`invMass = 0`). Walls, floors, immovable platforms.
+- **`dynamic`** — integrated each step, finite mass.
+
+Static-vs-static pairs are skipped. Dynamic bodies do not collide with the screen edges by default — add static AABBs as walls.
+
+### `mass`
+
+Dynamic bodies derive mass from area when omitted:
+
+- Circle: `π * r²`
+- Box: `width * height`
+
+Pass `mass` explicitly to override (heavier bodies push lighter ones around). Static bodies ignore `mass`.
+
+### `friction` and `restitution`
+
+Pair-wise rules per contact:
+
+- **Friction** is averaged across the two bodies (`μ = (a.fric + b.fric) / 2`).
+- **Restitution** uses the minimum of the two bodies (`e = min(a.rest, b.rest)`). A perfectly bouncy ball on a non-bouncy floor will not bounce.
+
+Both default to `0`.
+
+---
+
+## `BodyShape`
+
+```ts
+type BodyShape =
+  | { readonly kind: 'circle'; readonly radius: number }
+  | { readonly kind: 'box';    readonly width: number; readonly height: number };
+```
+
+Boxes are **axis-aligned**. There's no rotation in the solver — a sprite that visually rotates while its body stays AABB is fine, but the physics shape will not match the visual.
+
+Pair handlers:
+
+| A vs B | Handler |
+| --- | --- |
+| circle, circle | `collideCircleCircle` |
+| circle, box | `collideCircleBox` |
+| box, circle | `collideCircleBox` (swapped) |
+| box, box | `collideBoxBox` |
+
+---
+
+## Type aliases
+
+```ts
+type Position2D = Component<{ x: 'f32'; y: 'f32' }>;
+type Velocity2D = Component<{ x: 'f32'; y: 'f32' }>;
+```
+
+Re-exported so you can type your own components if you build them outside the call to `defineComponent` (e.g., for sharing across modules).
+
+---
+
+## Caveats
+
+- **Imperative attach / detach.** Bodies aren't yet declarative — you can't `addComponent(world, id, physics.body, {...})` and have it Just Work, because `attach` does extra bookkeeping (deriving `invMass` from area, packing shape into `halfW`/`halfH`). A declarative `PhysicsBody` component is on the roadmap.
+- **No CCD.** A small fast-moving body can tunnel through a thin static. Either bump the body's radius / box size, or use multiple thinner walls.
+- **No sleeping bodies.** Every dynamic is integrated and pair-tested every step. With 200 dynamic bodies this is still well within frame budget on mid-tier devices.
+
+================================================================================
+# Source: docs/api-assets.md
+================================================================================
+
+# Assets
+
+```ts
+import { loadAsset, useAsset, clearAssetCache } from '@onlynative/game-engine';
+import type { AssetSource, LoadedAsset } from '@onlynative/game-engine';
+```
+
+One API for **bundled assets** (`require('./img.png')`) and **remote URLs** (`'https://.../img.png'`). Resolution is async and Suspense-friendly — the engine never blocks the simulation loop on I/O.
+
+The asset loader is renderer-agnostic. It returns a `localUri` and (where available) `width` / `height`; the renderer is responsible for turning that into a Skia `SkImage`, GL texture, or whatever it needs.
+
+---
+
+## `AssetSource`
+
+```ts
+type AssetSource = number | string;
+```
+
+- **`number`** — the value `require('./path/to/img.png')` returns. Resolved via `expo-asset`.
+- **`string`** — an absolute URL. Resolved via `expo-file-system`'s `File.downloadFileAsync` and cached on disk.
+
+---
+
+## `LoadedAsset`
+
+```ts
+interface LoadedAsset {
+  readonly source: AssetSource;
+  readonly localUri: string;       // file:// URI ready for native APIs
+  readonly width?: number;         // present for bundled images
+  readonly height?: number;
+}
+```
+
+`width` and `height` are **only set for bundled images**, where `expo-asset` reports them. Remote URLs return without dimensions — decode the image yourself if you need them (e.g., `Skia.Image.MakeImageFromEncoded`).
+
+---
+
+## `loadAsset(source)`
+
+```ts
+function loadAsset(source: AssetSource): Promise<LoadedAsset>;
+```
+
+Resolves the asset and returns a cached `Promise<LoadedAsset>`.
+
+**Promise-level deduplication.** All calls to `loadAsset` for the same source share one in-flight `Promise`:
+
+```ts
+loadAsset(require('./ball.png')); // starts download
+loadAsset(require('./ball.png')); // returns the same Promise
+loadAsset(require('./ball.png')); // and the same Promise
+```
+
+This is what makes `useAsset` (which calls `use(loadAsset(...))`) safe to call from multiple components without thundering-herd downloads.
+
+### Bundled (`number`) sources
+
+```ts
+const asset = await loadAsset(require('./assets/ball.png'));
+// asset.localUri  → 'file:///.../ball.png'
+// asset.width     → e.g. 16
+// asset.height    → e.g. 16
+```
+
+`expo-asset` handles the actual download (in dev) or `localUri` resolution (in release). The first call awaits `Asset.downloadAsync()` if needed; subsequent calls return immediately.
+
+### Remote (`string`) sources
+
+```ts
+const asset = await loadAsset('https://example.com/spritesheet.png');
+// asset.localUri  → 'file:///.../engine-assets/<urlhash>.png'
+```
+
+The first call:
+
+1. Ensures `Paths.cache/engine-assets/` exists.
+2. Hashes the URL with djb2 into a base-36 filename, appending the URL's extension if any.
+3. Downloads via `File.downloadFileAsync`.
+
+Subsequent calls (same URL, same app install) skip the download and return the on-disk path.
+
+> **Cache invalidation caveat.** The cache filename hashes the **URL**, not the response body. A URL that serves different bytes over time (`/sprite.png` updated server-side) will keep returning the stale cached file. Use versioned URLs (`/v1.2.3/sprite.png`) or call `clearAssetCache()` and re-download.
+>
+> `clearAssetCache()` only clears the in-flight `Promise` map — it does **not** delete files from disk. To wipe disk cache, delete `Paths.cache/engine-assets/` yourself via `expo-file-system`.
+
+---
+
+## `useAsset(source)`
+
+```ts
+function useAsset(source: AssetSource): LoadedAsset;
+```
+
+React 19 Suspense hook. Internally:
+
+```ts
+export function useAsset(source: AssetSource): LoadedAsset {
+  return use(loadAsset(source));
+}
+```
+
+Wrap consumers in `<Suspense fallback={...}>`. The shared in-flight `Promise` means it's safe to call `useAsset(sameSource)` from multiple components — they all suspend on the same Promise and resume together.
+
+```tsx
+import { Suspense } from 'react';
+import { useAsset } from '@onlynative/game-engine';
+
+function Ball() {
+  const asset = useAsset(require('./ball.png'));
+  // asset.localUri is ready
+  return null;
+}
+
+export default function App() {
+  return (
+    <Suspense fallback={<LoadingScreen />}>
+      <Ball />
+    </Suspense>
+  );
+}
+```
+
+> **Don't call `useAsset` inside `<GameEngine>` children if you can't afford a remount on suspend.** Suspense unmounts subtrees while pending — that includes the engine. If you want the engine to mount once and assets to load opportunistically, fetch with `loadAsset(...)` outside the React tree (or inside a sibling `<Suspense>` boundary) and pass the result down.
+
+---
+
+## `clearAssetCache()`
+
+```ts
+function clearAssetCache(): void;
+```
+
+Drops the in-flight `Promise` map. The next `loadAsset(source)` call will resolve fresh:
+
+- Bundled sources re-query `expo-asset`.
+- Remote sources re-check disk and re-download if the file is missing.
+
+This does **not** delete cached files from disk. Use it after deleting files yourself, or to force a re-resolve in tests.
+
+---
+
+## Patterns
+
+### Wiring assets to a renderer
+
+The Skia renderer takes a `SharedValue<ReadonlyArray<SkiaSprite>>` indexed by `Sprite.atlas`. The pattern is:
+
+1. `useAsset(require('./ball.png'))` → `LoadedAsset` with `localUri`.
+2. Decode into an `SkImage` (e.g., `useImage(asset.localUri)` from `@shopify/react-native-skia`, or `Skia.Image.MakeImageFromEncoded` for bytes).
+3. Build a `SkiaSprite[]` and put it in a `useDerivedValue` so worklets see it.
+
+```tsx
+const ballAsset = useAsset(require('./ball.png'));
+const ballImg = useImage(ballAsset.localUri);
+const images = useDerivedValue<ReadonlyArray<SkiaSprite>>(() => [
+  { image: ballImg, width: 16, height: 16 },
+]);
+```
+
+See [the Skia renderer doc](./api-renderer-skia.md) for the full atlas-indexing model.
+
+### Preloading
+
+If you want to block the loading screen until everything's on disk:
+
+```ts
+await Promise.all([
+  loadAsset(require('./ball.png')),
+  loadAsset(require('./paddle.png')),
+  loadAsset('https://cdn.example.com/level-1.png'),
+]);
+```
+
+Each call dedupes against the next `useAsset(source)` of the same source — Suspense will not re-block.
+
+================================================================================
+# Source: docs/api-renderer-skia.md
+================================================================================
+
+# Skia renderer
+
+```ts
+import { SkiaRenderer } from '@onlynative/game-engine/renderers/skia';
+import type { SkiaRendererProps, SkiaSprite } from '@onlynative/game-engine/renderers/skia';
+```
+
+A single `<Canvas>` driven by a Reanimated worklet that iterates a flat snapshot of the world on the UI thread. No React reconciliation per entity, no per-frame `runOnJS` / `runOnUI` calls.
+
+The renderer is the **only** place the engine talks to Skia. It lives behind a subpath import so consumers who use a different renderer never pull `@shopify/react-native-skia` into their bundle.
+
+---
+
+## `<SkiaRenderer>` props
+
+```ts
+interface SkiaRendererProps {
+  readonly world: World;
+  readonly position: Component<{ x: 'f32'; y: 'f32' }>;
+  readonly sprite:   Component<{ atlas: 'u32'; frame: 'u16'; tint: 'u32' }>;
+  readonly images:   SharedValue<ReadonlyArray<SkiaSprite>>;
+}
+```
+
+### `world`
+
+The same [`World`](./api-core.md#worlds) you pass to `<GameEngine>`.
+
+### `position`
+
+A component with `{ x: 'f32'; y: 'f32' }`. Each entity's `(x, y)` is the **center** of where the sprite is drawn.
+
+The renderer doesn't care which component you call this — pass any component matching that schema. Most games use the `Position` component their physics step writes into.
+
+### `sprite`
+
+A component with `{ atlas: 'u32'; frame: 'u16'; tint: 'u32' }`:
+
+- **`atlas`** — index into the `images` array. The renderer reads `images.value[atlas]` to find the texture to draw.
+- **`frame`** — sprite-sheet frame index. Reserved for atlas slicing; **not yet read** by the renderer.
+- **`tint`** — packed RGBA color. Reserved for tinting; **not yet read** by the renderer.
+
+Only entities that have **both** `position` and `sprite` are drawn.
+
+### `images`
+
+A `SharedValue<ReadonlyArray<SkiaSprite>>`. The renderer reads `images.value[sprite.atlas[id]]` per entity inside a worklet.
+
+```ts
+interface SkiaSprite {
+  readonly image: SkImage | null;
+  readonly width: number;          // logical width in px
+  readonly height: number;         // logical height in px
+}
+```
+
+Use `useDerivedValue` to build the array from your loaded textures:
+
+```tsx
+const ballAsset  = useAsset(require('./ball.png'));
+const ballImg    = useImage(ballAsset.localUri);
+
+const paddleAsset = useAsset(require('./paddle.png'));
+const paddleImg   = useImage(paddleAsset.localUri);
+
+const images = useDerivedValue<ReadonlyArray<SkiaSprite>>(() => [
+  { image: ballImg,   width: 16, height: 16 },  // atlas index 0
+  { image: paddleImg, width: 64, height: 12 },  // atlas index 1
+]);
+```
+
+Then on each entity, set `Sprite.atlas = 0` for a ball or `1` for a paddle.
+
+> Slots with `image: null` (texture still loading) are silently skipped. The entity stays in the world, just invisible until the texture resolves.
+
+---
+
+## What the renderer draws
+
+For each alive entity matching `position.bit | sprite.bit`:
+
+```
+canvas.drawImageRect(
+  img,
+  { x: 0, y: 0, width: img.width(), height: img.height() }, // src rect (full image)
+  {
+    x: position.x - sprite.width  * 0.5,
+    y: position.y - sprite.height * 0.5,
+    width:  sprite.width,
+    height: sprite.height,
+  },
+  paint, // antialiased, no tint
+);
+```
+
+So:
+
+- **Origin is centered.** `(position.x, position.y)` is the *center* of the drawn sprite.
+- **Source rect is the entire image.** Sprite-sheet slicing (`frame` field) is not implemented yet.
+- **No rotation, no scale beyond width/height.** Apply scale by changing `SkiaSprite.width` / `height`. Rotation needs a future renderer change (or a different renderer).
+- **No tint.** The `tint` field is reserved for when paint masking lands.
+
+---
+
+## How frames flow
+
+1. **Sim step ends.** The engine fires registered `loop.onAfterStep` callbacks once per tick that produced ≥1 step.
+2. **Renderer's `onAfterStep` callback runs on the JS thread.** It scans `[0, world.nextId)` and packs every drawable entity into a fresh `Float32Array(count * 3)`:
+   ```
+   [x0, y0, atlas0, x1, y1, atlas1, ...]
+   ```
+3. **Assigning `packed.value = out` triggers Reanimated to clone the array to the UI thread.**
+4. **The UI-thread `useDerivedValue` worklet wakes up.** It reads `packed.value` and `images.value`, builds an `SkPicture` with one `drawImageRect` per entity.
+5. **The `<Picture>` element draws the picture.**
+
+> **Reanimated 4 does not zero-copy TypedArrays** (`react-native-worklets` clones every `ArrayBuffer` / `ArrayBufferView` in `cloneArrayBuffer` / `cloneArrayBufferView`). The renderer pushes a fresh snapshot each frame; assigning a new `SharedValue` reference is what makes Reanimated re-clone.
+>
+> Cost: `world.nextId * 3 * 4` bytes copied per render frame — at phase-1 entity counts (≤200), this is comfortably negligible.
+
+---
+
+## Performance notes
+
+- **Single `<Canvas>`.** All entities draw into one Skia surface; no React tree per sprite.
+- **Snapshot, not iteration over the live world.** The worklet never touches `World` directly — Reanimated would have to clone the entire structure on every assignment.
+- **Per-frame allocation: one `Float32Array`.** Replace with a pre-allocated buffer or a circular pair of buffers if profiling says it matters; today it doesn't.
+- **`drawImageRect` allocates a `SkRect` per call.** Switch to `drawAtlas` once a sprite atlas lands. Documented as a follow-up in the project's known caveats.
+
+---
+
+## Background color
+
+Hardcoded to `#fafafa` today via the canvas's `backgroundColor` style. Wrap the renderer in your own `<View>` with a different background if you need control over this — the canvas' background draws under everything, so a wrapping view can show through transparency in the canvas content.
+
+---
+
+## Limitations / roadmap
+
+- **Components named in props, not declared by renderer.** The renderer assumes its `position` and `sprite` props match the schemas above. There's no formal "renderer-component-API" yet — designing one is on the roadmap so renderers can declare which components they read.
+- **`frame` and `tint` not yet wired.** Both fields are accepted in the schema but ignored at draw time.
+- **No rotation, no per-entity scale.** Scale is per-sprite (the `SkiaSprite.width` / `height` you put in the shared array), not per-entity.
+- **One canvas, one z-order.** Entities draw in entity-id order. There's no z-sort yet — add a `z: 'i16'` field to the sprite component and sort the snapshot if you need it.

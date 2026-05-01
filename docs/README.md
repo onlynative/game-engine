@@ -1,0 +1,24 @@
+# Documentation
+
+API reference and concept docs for `@onlynative/game-engine`.
+
+For install + a runnable minimal example, see the [repo root README](../README.md).
+
+## Concepts
+
+- [Architecture](./concepts.md) — the two-loop split, ECS rationale, fixed timestep, why no React per frame.
+
+## API reference
+
+- [Core](./api-core.md) — `createWorld`, `defineComponent`, entity lifecycle, `query`, `createLoop`, `System`, `FrameContext`.
+- [`<GameEngine>`](./api-game-engine.md) — mount component, `useEngine`.
+- [Physics](./api-physics.md) — `createPhysics`, `BodyDef`, body shapes.
+- [Assets](./api-assets.md) — `loadAsset`, `useAsset`, `clearAssetCache`.
+- [Skia renderer](./api-renderer-skia.md) — `<SkiaRenderer>`, `SkiaSprite`.
+
+## Subpath imports
+
+| Import | Module |
+| --- | --- |
+| `@onlynative/game-engine` | ECS, world, loop, `<GameEngine>`, physics, asset loader |
+| `@onlynative/game-engine/renderers/skia` | `<SkiaRenderer>`, `SkiaSprite` |
