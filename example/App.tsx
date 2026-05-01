@@ -7,7 +7,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 import { GameEngine } from '@onlynative/game-engine';
-import { SkiaRenderer, type SkiaSprite } from '@onlynative/game-engine/renderers/skia';
+import { SkiaRenderer, gridFrames, type SkiaAtlas } from '@onlynative/game-engine/renderers/skia';
 
 import { HUD } from './src/HUD';
 import {
@@ -31,7 +31,7 @@ import {
 
 const BRICK_COLORS = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6'];
 
-function makeCircleTexture(radius: number, color: string): SkImage | null {
+function makeCircleImage(radius: number, color: string): SkImage | null {
   const size = radius * 2;
   const surface = Skia.Surface.Make(size, size);
   if (!surface) return null;
@@ -43,7 +43,7 @@ function makeCircleTexture(radius: number, color: string): SkImage | null {
   return surface.makeImageSnapshot();
 }
 
-function makeRoundedRectTexture(
+function makeRoundedRectImage(
   width: number,
   height: number,
   color: string,
@@ -60,14 +60,42 @@ function makeRoundedRectTexture(
   return surface.makeImageSnapshot();
 }
 
-function buildSprites(): ReadonlyArray<SkiaSprite> {
-  const ball = makeCircleTexture(BALL_RADIUS, '#111827');
-  const paddle = makeRoundedRectTexture(PADDLE_WIDTH, PADDLE_HEIGHT, '#1f2937', 6);
-  const bricks = BRICK_COLORS.map((c) => makeRoundedRectTexture(BRICK_W, BRICK_H, c, 3));
+function makeBrickAtlasImage(): SkImage | null {
+  const surface = Skia.Surface.Make(BRICK_W, BRICK_H * BRICK_COLORS.length);
+  if (!surface) return null;
+  const canvas = surface.getCanvas();
+  const paint = Skia.Paint();
+  paint.setAntiAlias(true);
+  for (let i = 0; i < BRICK_COLORS.length; i++) {
+    paint.setColor(Skia.Color(BRICK_COLORS[i]));
+    const rrect = Skia.RRectXY(Skia.XYWHRect(0, i * BRICK_H, BRICK_W, BRICK_H), 3, 3);
+    canvas.drawRRect(rrect, paint);
+  }
+  return surface.makeImageSnapshot();
+}
+
+function buildAtlases(): ReadonlyArray<SkiaAtlas> {
+  const ball = makeCircleImage(BALL_RADIUS, '#111827');
+  const paddle = makeRoundedRectImage(PADDLE_WIDTH, PADDLE_HEIGHT, '#1f2937', 6);
+  const bricks = makeBrickAtlasImage();
   return [
-    { image: ball, width: BALL_RADIUS * 2, height: BALL_RADIUS * 2 },
-    { image: paddle, width: PADDLE_WIDTH, height: PADDLE_HEIGHT },
-    ...bricks.map((img) => ({ image: img, width: BRICK_W, height: BRICK_H })),
+    {
+      image: ball,
+      frames: [{ x: 0, y: 0, width: BALL_RADIUS * 2, height: BALL_RADIUS * 2 }],
+    },
+    {
+      image: paddle,
+      frames: [{ x: 0, y: 0, width: PADDLE_WIDTH, height: PADDLE_HEIGHT }],
+    },
+    {
+      image: bricks,
+      frames: gridFrames({
+        frameWidth: BRICK_W,
+        frameHeight: BRICK_H,
+        columns: 1,
+        rows: BRICK_COLORS.length,
+      }),
+    },
   ];
 }
 
@@ -77,11 +105,11 @@ export default function App() {
     [],
   );
 
-  const images = useSharedValue<ReadonlyArray<SkiaSprite>>([]);
+  const atlases = useSharedValue<ReadonlyArray<SkiaAtlas>>([]);
 
   useEffect(() => {
-    images.value = buildSprites();
-  }, [images]);
+    atlases.value = buildAtlases();
+  }, [atlases]);
 
   return (
     <GestureHandlerRootView style={styles.root}>
@@ -91,7 +119,7 @@ export default function App() {
             world={world}
             systems={systems}
             renderer={
-              <SkiaRenderer world={world} position={Position} sprite={Sprite} images={images} />
+              <SkiaRenderer world={world} position={Position} sprite={Sprite} atlases={atlases} />
             }
           >
             <HUD />

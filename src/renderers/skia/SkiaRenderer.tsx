@@ -13,10 +13,16 @@ import { useDerivedValue, useSharedValue, type SharedValue } from 'react-native-
 import { useEngine } from '../../GameEngine';
 import type { Component, World } from '../../core/types';
 
-export interface SkiaSprite {
-  readonly image: SkImage | null;
+export interface SkiaFrame {
+  readonly x: number;
+  readonly y: number;
   readonly width: number;
   readonly height: number;
+}
+
+export interface SkiaAtlas {
+  readonly image: SkImage | null;
+  readonly frames: ReadonlyArray<SkiaFrame>;
 }
 
 type PositionComponent = Component<{ x: 'f32'; y: 'f32' }>;
@@ -26,13 +32,14 @@ export interface SkiaRendererProps {
   readonly world: World;
   readonly position: PositionComponent;
   readonly sprite: SpriteComponent;
-  readonly images: SharedValue<ReadonlyArray<SkiaSprite>>;
+  readonly atlases: SharedValue<ReadonlyArray<SkiaAtlas>>;
 }
 
 const BACKGROUND = '#fafafa';
 const EMPTY = new Float32Array(0);
+const STRIDE = 4;
 
-export function SkiaRenderer({ world, position, sprite, images }: SkiaRendererProps) {
+export function SkiaRenderer({ world, position, sprite, atlases }: SkiaRendererProps) {
   const positionBit = position.bit;
   const spriteBit = sprite.bit;
   const required = positionBit | spriteBit;
@@ -54,19 +61,21 @@ export function SkiaRenderer({ world, position, sprite, images }: SkiaRendererPr
       const px = position.data.x as Float32Array;
       const py = position.data.y as Float32Array;
       const atlas = sprite.data.atlas as Uint32Array;
+      const frame = sprite.data.frame as Uint16Array;
 
       let count = 0;
       for (let i = 0; i < n; i++) {
         if (alive[i] === 1 && (mask[i] & required) === required) count++;
       }
-      const out = new Float32Array(count * 3);
+      const out = new Float32Array(count * STRIDE);
       let j = 0;
       for (let i = 0; i < n; i++) {
         if (alive[i] === 1 && (mask[i] & required) === required) {
           out[j] = px[i];
           out[j + 1] = py[i];
           out[j + 2] = atlas[i];
-          j += 3;
+          out[j + 3] = frame[i];
+          j += STRIDE;
         }
       }
       packed.value = out;
@@ -75,20 +84,18 @@ export function SkiaRenderer({ world, position, sprite, images }: SkiaRendererPr
 
   const picture = useDerivedValue<SkPicture>(() => {
     const arr = packed.value;
-    const imgs = images.value;
+    const list = atlases.value;
     return createPicture((canvas) => {
       const len = arr.length;
-      for (let k = 0; k < len; k += 3) {
-        const idx = arr[k + 2] | 0;
-        const slot = imgs[idx];
-        if (!slot || !slot.image) continue;
-        const img = slot.image;
-        const w = slot.width;
-        const h = slot.height;
+      for (let k = 0; k < len; k += STRIDE) {
+        const a = list[arr[k + 2] | 0];
+        if (!a || !a.image) continue;
+        const f = a.frames[arr[k + 3] | 0];
+        if (!f) continue;
         canvas.drawImageRect(
-          img,
-          { x: 0, y: 0, width: img.width(), height: img.height() },
-          { x: arr[k] - w * 0.5, y: arr[k + 1] - h * 0.5, width: w, height: h },
+          a.image,
+          { x: f.x, y: f.y, width: f.width, height: f.height },
+          { x: arr[k] - f.width * 0.5, y: arr[k + 1] - f.height * 0.5, width: f.width, height: f.height },
           paint,
         );
       }

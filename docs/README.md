@@ -14,11 +14,11 @@ For install + a runnable minimal example, see the [repo root README](../README.m
 - [`<GameEngine>`](./api-game-engine.md) — mount component, `useEngine`.
 - [Physics](./api-physics.md) — `createPhysics`, `BodyDef`, body shapes.
 - [Assets](./api-assets.md) — `loadAsset`, `useAsset`, `clearAssetCache`.
-- [Skia renderer](./api-renderer-skia.md) — `<SkiaRenderer>`, `SkiaSprite`.
+- [Skia renderer](./api-renderer-skia.md) — `<SkiaRenderer>`, `SkiaAtlas`, `loadSkiaAtlas`, `gridFrames`.
 
 ## Subpath imports
 
 | Import | Module |
 | --- | --- |
 | `@onlynative/game-engine` | ECS, world, loop, `<GameEngine>`, physics, asset loader |
-| `@onlynative/game-engine/renderers/skia` | `<SkiaRenderer>`, `SkiaSprite` |
+| `@onlynative/game-engine/renderers/skia` | `<SkiaRenderer>`, `SkiaAtlas`, `loadSkiaAtlas`, `gridFrames` |

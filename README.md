@@ -55,7 +55,7 @@ import {
   defineComponent,
   type System,
 } from '@onlynative/game-engine';
-import { SkiaRenderer, type SkiaSprite } from '@onlynative/game-engine/renderers/skia';
+import { SkiaRenderer, loadSkiaAtlas, type SkiaAtlas } from '@onlynative/game-engine/renderers/skia';
 
 const world = createWorld({ capacity: 1024 });
 const Position = defineComponent(world, { x: 'f32', y: 'f32' });
@@ -79,10 +79,13 @@ physics.attach(id, {
 });
 
 export default function App() {
-  const tex = useImageAsTexture(require('./assets/ball.png'));
-  const images = useDerivedValue<ReadonlyArray<SkiaSprite>>(() => [
-    { image: tex.value, width: 16, height: 16 },
-  ]);
+  const atlases = useSharedValue<ReadonlyArray<SkiaAtlas>>([]);
+  useEffect(() => {
+    loadSkiaAtlas(require('./assets/ball.png')).then((a) => {
+      atlases.value = [a];
+    });
+  }, [atlases]);
+
   const systems = useMemo<ReadonlyArray<System>>(() => [physics.step], []);
 
   return (
@@ -95,7 +98,7 @@ export default function App() {
             world={world}
             position={Position}
             sprite={Sprite}
-            images={images}
+            atlases={atlases}
           />
         }
       />
@@ -109,7 +112,7 @@ export default function App() {
 | Import | Contains |
 | --- | --- |
 | `@onlynative/game-engine` | ECS, world, loop, `<GameEngine>`, physics, asset loader |
-| `@onlynative/game-engine/renderers/skia` | `<SkiaRenderer>`, `SkiaSprite` |
+| `@onlynative/game-engine/renderers/skia` | `<SkiaRenderer>`, `SkiaAtlas`, `loadSkiaAtlas`, `gridFrames` |
 
 The renderer split is structural: phase 2 will add `@onlynative/game-engine/renderers/three`, which depends on `expo-gl` and `expo-three`. Keeping renderers behind subpath imports means consumers never pay for a renderer they don't use.
 

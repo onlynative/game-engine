@@ -118,7 +118,7 @@ function spawnBricks(screenW: number): number {
         restitution: 1,
         friction: 0,
       });
-      addComponent(world, id, Sprite, { atlas: ATLAS_BRICK + r, frame: 0, tint: 0 });
+      addComponent(world, id, Sprite, { atlas: ATLAS_BRICK, frame: r, tint: 0 });
       addComponent(world, id, Brick, { _: 1 });
       count++;
     }

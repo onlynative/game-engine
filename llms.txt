@@ -21,7 +21,7 @@ For a runnable minimal example, see the README.
 - [`<GameEngine>` and `useEngine`](https://unpkg.com/@onlynative/game-engine/docs/api-game-engine.md): React mount component, props, gesture-driven input pipeline, layout/screen propagation, lifecycle.
 - [Physics](https://unpkg.com/@onlynative/game-engine/docs/api-physics.md): `createPhysics`, `BodyDef`, `BodyShape`, the custom circles + AABB solver, friction/restitution rules, and current limitations (no rotation, no joints, O(N²) broadphase).
 - [Assets](https://unpkg.com/@onlynative/game-engine/docs/api-assets.md): `loadAsset`, `useAsset`, `clearAssetCache`, the bundled-vs-remote source model, Suspense semantics, and disk-cache caveats.
-- [Skia renderer](https://unpkg.com/@onlynative/game-engine/docs/api-renderer-skia.md): `<SkiaRenderer>`, `SkiaSprite`, the worklet snapshot/draw pipeline, atlas indexing, and what is and isn't yet wired (`frame`, `tint`, rotation).
+- [Skia renderer](https://unpkg.com/@onlynative/game-engine/docs/api-renderer-skia.md): `<SkiaRenderer>`, `SkiaAtlas` / `SkiaFrame`, `loadSkiaImage` / `loadSkiaAtlas` / `gridFrames`, the worklet snapshot/draw pipeline, atlas + frame indexing, and what is and isn't yet wired (`tint`, rotation).
 
 ## Optional
 

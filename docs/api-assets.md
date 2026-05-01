@@ -145,21 +145,27 @@ This does **not** delete cached files from disk. Use it after deleting files you
 
 ### Wiring assets to a renderer
 
-The Skia renderer takes a `SharedValue<ReadonlyArray<SkiaSprite>>` indexed by `Sprite.atlas`. The pattern is:
-
-1. `useAsset(require('./ball.png'))` → `LoadedAsset` with `localUri`.
-2. Decode into an `SkImage` (e.g., `useImage(asset.localUri)` from `@shopify/react-native-skia`, or `Skia.Image.MakeImageFromEncoded` for bytes).
-3. Build a `SkiaSprite[]` and put it in a `useDerivedValue` so worklets see it.
+The Skia renderer takes a `SharedValue<ReadonlyArray<SkiaAtlas>>` indexed by `Sprite.atlas`, with `Sprite.frame` selecting a sub-rect of each atlas image. The renderer ships a helper that wraps `loadAsset` + `Skia.Image.MakeImageFromEncoded`:
 
 ```tsx
-const ballAsset = useAsset(require('./ball.png'));
-const ballImg = useImage(ballAsset.localUri);
-const images = useDerivedValue<ReadonlyArray<SkiaSprite>>(() => [
-  { image: ballImg, width: 16, height: 16 },
-]);
+import { loadSkiaAtlas, gridFrames, type SkiaAtlas } from '@onlynative/game-engine/renderers/skia';
+
+const atlases = useSharedValue<ReadonlyArray<SkiaAtlas>>([]);
+
+useEffect(() => {
+  Promise.all([
+    loadSkiaAtlas(require('./ball.png')),                      // single-frame atlas
+    loadSkiaAtlas(
+      require('./hero.png'),
+      gridFrames({ frameWidth: 32, frameHeight: 32, columns: 8, rows: 4 }),
+    ),                                                          // 32-frame sheet
+  ]).then((list) => {
+    atlases.value = list;
+  });
+}, [atlases]);
 ```
 
-See [the Skia renderer doc](./api-renderer-skia.md) for the full atlas-indexing model.
+`loadSkiaAtlas` reuses the asset cache (in-flight dedupe, disk cache for remote URLs), so the same `Promise<SkiaAtlas>` can be awaited from multiple call sites without redecoding. See [the Skia renderer doc](./api-renderer-skia.md) for the full atlas + frame indexing model.
 
 ### Preloading
 
