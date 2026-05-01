@@ -588,8 +588,8 @@ import { GameEngine, useEngine } from '@onlynative/game-engine';
 
 ```ts
 interface GameEngineProps {
-  readonly world: World;
-  readonly systems: ReadonlyArray<System>;
+  readonly world: World | Promise<World>;
+  readonly systems: ReadonlyArray<System> | Promise<ReadonlyArray<System>>;
   readonly renderer: ReactNode;
   readonly running?: boolean;          // default true
   readonly hz?: number;                // default 60
@@ -601,11 +601,13 @@ interface GameEngineProps {
 
 The [world](./api-core.md#worlds) the loop drives. The loop is created once on mount; passing a new `world` reference triggers an internal `loop.swap(world, systems)` on the next render — the loop is **not** torn down and recreated.
 
+May also be a `Promise<World>`. The component calls React 19's `use()` on it, suspending the nearest `<Suspense>` boundary until the promise settles. See [Suspense and async level loads](#suspense-and-async-level-loads).
+
 ### `systems`
 
-The system list to run each fixed step, in order. Like `world`, replacing the array calls `loop.swap`.
+The system list to run each fixed step, in order. Like `world`, replacing the array calls `loop.swap`. Also accepts a `Promise<ReadonlyArray<System>>` — typically derived from the same level-loader promise as `world`.
 
-> Wrap `systems` in `useMemo` so identity is stable across renders. A fresh array reference every render does extra `swap` calls — harmless but wasteful.
+> Wrap `systems` in `useMemo` so identity is stable across renders. A fresh array reference every render does extra `swap` calls — harmless but wasteful. The same applies to promises: memoize the source promise so `use()` doesn't keep re-suspending.
 
 ### `renderer`
 
@@ -617,7 +619,7 @@ renderer={
     world={world}
     position={Position}
     sprite={Sprite}
-    images={images}
+    atlases={atlases}
   />
 }
 ```
@@ -671,6 +673,73 @@ Common uses:
 
 ---
 
+## Suspense and async level loads
+
+The `world` and `systems` props each accept a `Promise`. Inside `<GameEngine>` the component calls `use(world)` / `use(systems)` (React 19), so:
+
+- The component **suspends** until both promises settle. Any ancestor `<Suspense fallback={...}>` shows its fallback.
+- Once both resolve, the component renders normally and `loop.swap` runs with the resolved values — the same path a synchronous prop change takes.
+- Wrap the swap in `useTransition` to keep the previous level on screen while the next one loads instead of falling back.
+
+The recommended pattern: build one `Promise<{ world, systems }>` per level and derive the two prop promises from it with stable identity.
+
+```tsx
+import { Suspense, useMemo, useState, useTransition } from 'react';
+import { GameEngine } from '@onlynative/game-engine';
+
+interface Level {
+  world: World;
+  systems: ReadonlyArray<System>;
+}
+
+async function loadLevel(n: number): Promise<Level> {
+  // build the world, attach physics bodies, decode any atlases the level needs, etc.
+}
+
+function Game({ levelNum }: { levelNum: number }) {
+  const levelPromise = useMemo(() => loadLevel(levelNum), [levelNum]);
+  const worldPromise = useMemo(() => levelPromise.then((l) => l.world), [levelPromise]);
+  const systemsPromise = useMemo(() => levelPromise.then((l) => l.systems), [levelPromise]);
+
+  return (
+    <GameEngine
+      world={worldPromise}
+      systems={systemsPromise}
+      renderer={<SkiaRenderer .../>}
+    />
+  );
+}
+
+function App() {
+  const [n, setN] = useState(1);
+  const [, startTransition] = useTransition();
+  return (
+    <>
+      <Suspense fallback={<LoadingScreen />}>
+        <Game levelNum={n} />
+      </Suspense>
+      <NextLevelButton onPress={() => startTransition(() => setN((m) => m + 1))} />
+    </>
+  );
+}
+```
+
+Why memoize the derived promises: React's `use()` matches by promise identity. Re-deriving via `.then(...)` inside JSX would create a new promise every render and re-suspend forever.
+
+Alternative pattern: skip the engine's promise support and call `use()` yourself at the parent. `<GameEngine>` accepts plain `World` / `ReadonlyArray<System>` too, so this path is just as legal — and avoids deriving two promises:
+
+```tsx
+function Game({ levelNum }: { levelNum: number }) {
+  const levelPromise = useMemo(() => loadLevel(levelNum), [levelNum]);
+  const { world, systems } = use(levelPromise);
+  return <GameEngine world={world} systems={systems} renderer={<SkiaRenderer .../>} />;
+}
+```
+
+The two patterns differ only in where suspension happens; the swap behavior is identical.
+
+---
+
 ## Input pipeline
 
 `<GameEngine>` wraps its content in a `<GestureDetector>` composed of three modern Gestures:
@@ -701,11 +770,12 @@ If you mount `<GameEngine>` inside a non-flexed container, give it explicit widt
 
 ## Lifecycle
 
-1. **Mount.** `<GameEngine>` calls `createLoop(world, systems, { hz })`, memoized on `hz`.
-2. **First effect.** `loop.swap(world, systems)` is called once to bind the world and systems.
-3. **Running effect.** If `running` is true, `loop.start()`. The cleanup runs `loop.stop()`.
-4. **Re-render with new `world` or `systems`.** Triggers another `loop.swap`. The loop keeps running; the next tick uses the new state.
-5. **Unmount.** `loop.stop()` runs from the `running` effect's cleanup. Pending timeouts are cleared.
+1. **Resolve.** If `world` or `systems` is a Promise, `<GameEngine>` calls `use()` on it and suspends until settled. Sync values pass through untouched.
+2. **Mount.** Calls `createLoop(world, systems, { hz })`, memoized on `hz`.
+3. **First effect.** `loop.swap(world, systems)` is called once to bind the world and systems.
+4. **Running effect.** If `running` is true, `loop.start()`. The cleanup runs `loop.stop()`.
+5. **Re-render with new `world` or `systems`.** Triggers another `loop.swap`. The loop keeps running; the next tick uses the new state. With promises, this happens after the new promise resolves.
+6. **Unmount.** `loop.stop()` runs from the `running` effect's cleanup. Pending timeouts are cleared.
 
 The loop is **not** destroyed on `running={false}` — it's just stopped. If you want a hard reset, unmount `<GameEngine>` and remount with a new `world`.
 

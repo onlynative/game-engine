@@ -1,5 +1,6 @@
 import {
   createContext,
+  use,
   useCallback,
   useContext,
   useEffect,
@@ -15,12 +16,21 @@ import { createLoop, type Loop } from './core/loop';
 import type { System, TouchEvent, World } from './core/types';
 
 export interface GameEngineProps {
-  readonly world: World;
-  readonly systems: ReadonlyArray<System>;
+  readonly world: World | Promise<World>;
+  readonly systems: ReadonlyArray<System> | Promise<ReadonlyArray<System>>;
   readonly renderer: ReactNode;
   readonly running?: boolean;
   readonly hz?: number;
   readonly children?: ReactNode;
+}
+
+function isThenable<T>(v: unknown): v is PromiseLike<T> {
+  return (
+    typeof v === 'object' &&
+    v !== null &&
+    'then' in v &&
+    typeof (v as { then: unknown }).then === 'function'
+  );
 }
 
 const EngineContext = createContext<Loop | null>(null);
@@ -41,11 +51,17 @@ export function GameEngine({
   hz = 60,
   children,
 }: GameEngineProps) {
-  const loop = useMemo(() => createLoop(world, systems, { hz }), [hz]);
+  const resolvedWorld = isThenable<World>(world) ? use(world) : world;
+  const resolvedSystems = isThenable<ReadonlyArray<System>>(systems) ? use(systems) : systems;
+
+  const loop = useMemo(
+    () => createLoop(resolvedWorld, resolvedSystems, { hz }),
+    [hz],
+  );
 
   useEffect(() => {
-    loop.swap(world, systems);
-  }, [loop, world, systems]);
+    loop.swap(resolvedWorld, resolvedSystems);
+  }, [loop, resolvedWorld, resolvedSystems]);
 
   useEffect(() => {
     if (running) loop.start();
