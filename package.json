@@ -1,8 +1,5 @@
 {
   "name": "@onlynative/game-engine",
-  "publishConfig": {
-    "access": "public"
-  },
   "version": "0.1.0",
   "description": "2D (and soon 3D) game engine for React Native + Expo Go. Skia-based renderer, ECS core, fixed-timestep loop, no native code.",
   "keywords": [
@@ -20,36 +17,43 @@
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "react-native": "./src/index.ts",
+  "source": "./src/index.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
+      "react-native": "./src/index.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
     "./renderers/skia": {
       "types": "./dist/renderers/skia/index.d.ts",
+      "react-native": "./src/renderers/skia/index.ts",
       "import": "./dist/renderers/skia/index.js",
       "default": "./dist/renderers/skia/index.js"
     },
     "./package.json": "./package.json"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "files": [
     "dist",
+    "src",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
-    "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "expo start --web",
     "build": "rm -rf dist && tsc -p tsconfig.build.json",
-    "typecheck": "tsc --noEmit",
-    "prepack": "yarn build"
+    "typecheck": "tsc --noEmit && pnpm --filter example typecheck",
+    "prepack": "pnpm build",
+    "start": "pnpm --filter example start",
+    "ios": "pnpm --filter example ios",
+    "android": "pnpm --filter example android",
+    "web": "pnpm --filter example web"
   },
   "peerDependencies": {
     "@shopify/react-native-skia": ">=2.2.0",
-    "expo": ">=54.0.0",
     "expo-asset": ">=12.0.0",
     "expo-file-system": ">=19.0.0",
     "react": ">=19.0.0",
@@ -64,12 +68,10 @@
     "expo": "~54.0.33",
     "expo-asset": "~12.0.13",
     "expo-file-system": "~19.0.22",
-    "expo-status-bar": "~3.0.9",
     "react": "19.1.0",
     "react-native": "0.81.5",
     "react-native-gesture-handler": "~2.28.0",
     "react-native-reanimated": "~4.1.1",
-    "react-native-safe-area-context": "~5.6.0",
     "react-native-worklets": "0.5.1",
     "typescript": "~5.9.2"
   }
